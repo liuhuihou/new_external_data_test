@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API 设置</title>
+<style>
+:root{
+  --bg:#f4f4f1;--surface:#fff;--surface-2:#f7f6f2;--ink:#101010;--muted:#6a6862;--line:#dedcd3;
+  --brand:#2a78d6;--brand-ink:#1c5cab;--brand-soft:#eaf1fb;--good:#0ca30c;--warn:#a06b00;--crit:#c23b3b;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 4px 12px rgba(16,24,40,.06);
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+.shell{max-width:1240px;margin:0 auto;padding:24px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.title{font-size:22px;font-weight:750;margin:0}
+.sub{font-size:13px;color:var(--muted);margin-top:4px}
+.status{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:12px;font-weight:700}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:16px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:980px){.g2,.g3{grid-template-columns:1fr}}
+label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+.input,.select,.textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-size:13px}
+.textarea{min-height:96px;resize:vertical}
+.input:focus,.select:focus,.textarea:focus{outline:2px solid var(--brand);border-color:var(--brand)}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:13px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--brand);border-color:transparent;color:#fff}
+.btn.primary:hover{background:var(--brand-ink)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.note{font-size:12px;color:var(--muted);background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 18%,transparent);border-radius:8px;padding:10px 12px}
+.error{background:#fbebeb;border-color:#f0c4c4;color:var(--crit)}
+.result{white-space:pre-wrap;word-break:break-word;font-size:13px;background:#fafafa;border:1px solid var(--line);border-radius:8px;padding:14px}
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--line);background:#fff;color:var(--muted)}
+.muted{color:var(--muted)}
+.spinner{width:14px;height:14px;border:2px solid #d8d8d8;border-top-color:var(--brand);border-radius:50%;display:inline-block;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div>
+      <h1 class="title">API 设置</h1>
+      <div class="sub">请求地址、API Key、模型、ccswitch 与连通性测试</div>
+    </div>
+    <div class="toolbar" style="margin:0">
+      <button class="btn" type="button" onclick="window.location.href='外部数据测试SOP工作台.html'">返回工作台</button>
+      <span id="status" class="status">加载中</span>
+    </div>
+  </div>
+
+  <div id="error"></div>
+
+  <div class="card">
+    <div class="grid g2">
+      <div>
+        <label>Active Profile</label>
+        <select id="active" class="select"></select>
+      </div>
+      <div>
+        <label>API 类型</label>
+        <select id="api_type" class="select">
+          <option value="anthropic">anthropic</option>
+          <option value="openai">openai</option>
+          <option value="ccswitch">ccswitch</option>
+          <option value="zhipu">zhipu</option>
+        </select>
+      </div>
+      <div>
+        <label>请求地址</label>
+        <input id="api_url" class="input" placeholder="https://.../v1/chat/completions">
+      </div>
+      <div>
+        <label>Base URL</label>
+        <input id="base_url" class="input" placeholder="https://open.bigmodel.cn/api/paas/v4">
+      </div>
+      <div>
+        <label>API Key</label>
+        <input id="api_key" class="input" placeholder="your api key">
+      </div>
+      <div>
+        <label>Auth Token</label>
+        <input id="auth_token" class="input" placeholder="Bearer token">
+      </div>
+      <div>
+        <label>模型</label>
+        <input id="model" class="input" placeholder="glm-5.2">
+      </div>
+      <div>
+        <label>超时(秒)</label>
+        <input id="timeout_seconds" class="input" type="number" min="1" value="60">
+      </div>
+      <div>
+        <label>Temperature</label>
+        <input id="temperature" class="input" type="number" min="0" max="2" step="0.1" value="0.2">
+      </div>
+      <div>
+        <label>Max tokens</label>
+        <input id="max_tokens" class="input" type="number" min="1" value="4096">
+      </div>
+      <div>
+        <label>ccswitch 配置路径</label>
+        <input id="ccswitch_path" class="input" placeholder="E:/.../ccswitch.json">
+      </div>
+      <div>
+        <label>ccswitch Profile</label>
+        <input id="ccswitch_profile" class="input" placeholder="profile name">
+      </div>
+    </div>
+    <div class="toolbar">
+      <button id="save_btn" class="btn primary" type="button">保存配置</button>
+      <button id="reload_btn" class="btn" type="button">刷新</button>
+      <button id="test_btn" class="btn" type="button">连通性测试</button>
+    </div>
+    <div class="note">测试不会写入配置文件，只会使用当前表单内容调用后端接口。</div>
+  </div>
+
+  <div class="card">
+    <div class="grid g2">
+      <div>
+        <label>提问窗口</label>
+        <textarea id="question" class="textarea" placeholder="请输入用于测试接口连通性的简短问题">接口是否可用？</textarea>
+      </div>
+      <div>
+        <label>测试结果</label>
+        <div id="result" class="result muted">暂无结果</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $=(s,p=document)=>p.querySelector(s);
+const state={document:null,loading:false,saving:false,testing:false,error:""};
+
+function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+
+async function api(path,options={}){
+  const resp=await fetch(path,options);
+  const data=await resp.json().catch(()=>({ok:false,error:"后端返回非 JSON 响应"}));
+  if(!resp.ok||data.ok===false) throw new Error(data.error||`HTTP ${resp.status}`);
+  return data;
+}
+
+function setBusy(flag,kind){
+  if(kind==="save") state.saving=flag;
+  if(kind==="test") state.testing=flag;
+  $("#save_btn").disabled=state.saving||state.testing;
+  $("#test_btn").disabled=state.saving||state.testing;
+  $("#reload_btn").disabled=state.saving||state.testing;
+  $("#status").innerHTML=(state.saving||state.testing)?'<span class="spinner"></span> 处理中':'就绪';
+}
+
+function showError(message){
+  $("#error").innerHTML=message?`<div class="card error">${esc(message)}</div>`:"";
+}
+
+function profileNames(doc){
+  const defaults=["ccswitch","anthropic","openai_compatible","zhipu"];
+  const profiles=doc?.profiles||{};
+  return Array.from(new Set([...defaults,...Object.keys(profiles)]));
+}
+
+function currentActive(){
+  return $("#active").value || state.document?.active || "ccswitch";
+}
+
+function currentProfile(){
+  const doc=state.document||{active:"ccswitch",profiles:{}};
+  const active=currentActive();
+  const profiles=doc.profiles||{};
+  if(!profiles[active]) profiles[active]={};
+  return profiles[active];
+}
+
+function collectDocument(){
+  const doc=state.document||{active:"ccswitch",profiles:{}};
+  const profiles=JSON.parse(JSON.stringify(doc.profiles||{}));
+  const active=currentActive();
+  if(!profiles[active]) profiles[active]={};
+  const profile=profiles[active];
+  profile.api_type=$("#api_type").value;
+  profile.api_url=$("#api_url").value.trim();
+  profile.request_url=profile.api_url;
+  profile.base_url=$("#base_url").value.trim();
+  profile.api_key=$("#api_key").value.trim();
+  profile.auth_token=$("#auth_token").value.trim();
+  profile.model=$("#model").value.trim();
+  profile.timeout_seconds=Number($("#timeout_seconds").value||60);
+  profile.temperature=Number($("#temperature").value||0.2);
+  profile.max_tokens=Number($("#max_tokens").value||4096);
+  profile.ccswitch={
+    enabled:profile.api_type==="ccswitch",
+    config_path:$("#ccswitch_path").value.trim(),
+    profile:$("#ccswitch_profile").value.trim(),
+  };
+  return {active,profiles};
+}
+
+function applyDocument(doc){
+  state.document=doc||{active:"ccswitch",profiles:{}};
+  const names=profileNames(state.document);
+  const active=state.document.active||names[0]||"ccswitch";
+  $("#active").innerHTML=names.map(name=>`<option value="${esc(name)}"${name===active?" selected":""}>${esc(name)}</option>`).join("");
+  $("#active").value=active;
+  const profile=(state.document.profiles||{})[active]||{};
+  $("#api_type").value=profile.api_type||"anthropic";
+  $("#api_url").value=profile.api_url||profile.request_url||"";
+  $("#base_url").value=profile.base_url||"";
+  $("#api_key").value=profile.api_key||"";
+  $("#auth_token").value=profile.auth_token||"";
+  $("#model").value=profile.model||"";
+  $("#timeout_seconds").value=profile.timeout_seconds??60;
+  $("#temperature").value=profile.temperature??0.2;
+  $("#max_tokens").value=profile.max_tokens??4096;
+  $("#ccswitch_path").value=profile.ccswitch?.config_path||"";
+  $("#ccswitch_profile").value=profile.ccswitch?.profile||"";
+  $("#result").textContent="暂无结果";
+  $("#result").classList.add("muted");
+  showError("");
+  $("#status").textContent=`${active} · ${$("#api_type").value}`;
+}
+
+async function loadConfig(){
+  state.loading=true;
+  setBusy(true);
+  try{
+    const data=await api("/api/config");
+    applyDocument(data.document);
+    $("#status").textContent=`${currentActive()} · ${data.config?.api_type||$("#api_type").value}`;
+  }catch(err){
+    showError(`读取配置失败：${err.message}`);
+    $("#status").textContent="读取失败";
+  }finally{
+    state.loading=false;
+    setBusy(false);
+  }
+}
+
+async function saveConfig(){
+  showError("");
+  setBusy(true,"save");
+  try{
+    const document=collectDocument();
+    const data=await api("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({document})});
+    applyDocument(data.document||document);
+    $("#status").textContent=`已保存 · ${currentActive()}`;
+  }catch(err){
+    showError(`保存失败：${err.message}`);
+  }finally{
+    setBusy(false,"save");
+  }
+}
+
+async function testConfig(){
+  showError("");
+  setBusy(true,"test");
+  try{
+    const document=collectDocument();
+    const question=$("#question").value.trim()||"接口是否可用？";
+    const data=await api("/api/config/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({document,question})});
+    $("#result").classList.remove("muted");
+    $("#result").textContent=`${data.config.api_type} · ${data.config.model}\n${data.reply}`;
+  }catch(err){
+    $("#result").classList.remove("muted");
+    $("#result").textContent="";
+    showError(`连通性测试失败：${err.message}`);
+  }finally{
+    setBusy(false,"test");
+  }
+}
+
+function persistActiveDraft(){
+  if(!state.document) return;
+  const doc=collectDocument();
+  state.document.active=doc.active;
+  state.document.profiles=doc.profiles;
+}
+
+function bindEvents(){
+  $("#save_btn").addEventListener("click",saveConfig);
+  $("#reload_btn").addEventListener("click",loadConfig);
+  $("#test_btn").addEventListener("click",testConfig);
+  $("#active").addEventListener("change",()=>{
+    persistActiveDraft();
+    state.document.active=$("#active").value;
+    applyDocument(state.document);
+  });
+  ["api_type","api_url","base_url","api_key","auth_token","model","timeout_seconds","temperature","max_tokens","ccswitch_path","ccswitch_profile"].forEach(id=>{
+    $("#"+id).addEventListener("input",()=>$("#status").textContent=`${currentActive()} · ${$("#api_type").value}`);
+  });
+}
+
+bindEvents();
+loadConfig();
+</script>
+</body>
+</html>
