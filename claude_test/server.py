@@ -1261,9 +1261,27 @@ def stream_chat(document: dict[str, Any] | None, messages: list[dict[str, Any]],
         raise RuntimeError("没有可发送的消息")
     system = clean_value(system_prompt) or "你是一个乐于助人的中文助手，请用中文回答。"
     if config["api_type"] in {"openai", "chat_completions", "openai-compatible", "zhipu"}:
-        yield from stream_openai_compatible(config, system, merged)
+        gen = stream_openai_compatible(config, system, merged)
     else:
-        yield from stream_anthropic_messages(config, system, merged)
+        gen = stream_anthropic_messages(config, system, merged)
+    produced = False
+    stream_error: Exception | None = None
+    try:
+        for delta in gen:
+            produced = True
+            yield delta
+    except Exception as exc:  # noqa: BLE001
+        stream_error = exc
+    if produced:
+        if stream_error is not None:
+            raise stream_error
+        return
+    # 流式无产出(空响应或上游异常未产出)→ 回退到非流式一次性请求
+    reply, err, _ = call_ai_connection_test(document, messages, system_prompt)
+    if err:
+        raise RuntimeError(err)
+    if reply:
+        yield reply
 
 
 def post_json(url: str, payload: dict[str, Any], headers: dict[str, str], timeout: int, custom_headers: dict[str, Any] | None = None) -> tuple[str, str | None]:
@@ -1472,7 +1490,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
+        self.send_header("Connection", "close")
+        self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
         def sse(event: str, data: dict[str, Any]) -> None:

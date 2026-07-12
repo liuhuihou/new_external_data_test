@@ -67,22 +67,6 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
 .key-wrap{position:relative}
 .key-wrap .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:transparent;cursor:pointer;font-size:14px;color:var(--muted);padding:4px;line-height:1}
 .dirty-dot{color:var(--warn);font-weight:700}
-
-/* 对话区 */
-.chat-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px}
-.chat-head .title2{font-size:16px;font-weight:750}
-.chat-tools{display:flex;gap:8px}
-.sys-box{margin-bottom:12px}
-.chat-log{display:flex;flex-direction:column;gap:10px;max-height:380px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:14px;background:#fafafa;margin-bottom:12px;min-height:180px}
-.chat-empty{text-align:center;font-size:12px;color:var(--muted);align-self:center;margin:auto;line-height:1.8}
-.msg{max-width:80%;padding:9px 12px;border-radius:12px;font-size:13px;white-space:pre-wrap;word-break:break-word;line-height:1.55}
-.msg.user{align-self:flex-end;background:var(--brand);color:#fff;border-bottom-right-radius:3px}
-.msg.assistant{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:3px}
-.msg.error{background:#fbebeb;border-color:#f0c4c4;color:var(--crit)}
-.msg-pending{align-self:flex-start;background:#fff;border:1px solid var(--line);border-radius:12px;border-bottom-left-radius:3px;padding:9px 12px;font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:8px}
-.chat-input-row{display:flex;gap:10px;align-items:flex-end}
-.chat-input-row .textarea{min-height:60px;flex:1}
-.chat-input-row .btn{flex:none}
 @media(max-width:980px){
   .config-layout{flex-direction:column}
   .profile-rail{width:100%;flex-direction:row;overflow-x:auto;padding-bottom:6px}
@@ -96,9 +80,10 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
   <div class="topbar">
     <div>
       <h1 class="title">API 设置</h1>
-      <div class="sub">Profile 管理 · 请求地址、API Key、模型与对话测试</div>
+      <div class="sub">Profile 管理 · 请求地址、API Key、模型</div>
     </div>
     <div class="toolbar" style="margin:0">
+      <button class="btn" type="button" onclick="window.location.href='chat.html'">AI 交互</button>
       <button class="btn" type="button" onclick="window.location.href='外部数据测试SOP工作台.html'">返回工作台</button>
       <span id="status" class="status">加载中</span>
     </div>
@@ -171,26 +156,7 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
           <button id="save_btn" class="btn primary" type="button">保存配置</button>
           <button id="reload_btn" class="btn" type="button">刷新</button>
         </div>
-        <div class="note">配置按 profile 保存到 <code>api_config.json</code>;下方对话测试使用当前表单内容,不会写盘。内置 profile(anthropic / openai_compatible / zhipu)不可删除或重命名。</div>
-      </div>
-
-      <div class="card">
-        <div class="chat-head">
-          <div class="title2">对话测试</div>
-          <div class="chat-tools">
-            <button class="btn mini" id="sys_toggle" type="button">系统提示词</button>
-            <button class="btn mini" id="chat_clear" type="button">清空</button>
-          </div>
-        </div>
-        <div id="sys_box" class="sys-box" style="display:none">
-          <input id="system_prompt" class="input" placeholder="系统提示词(可选),留空使用默认助手">
-        </div>
-        <div id="chat_log" class="chat-log"></div>
-        <div class="chat-input-row">
-          <textarea id="chat_input" class="textarea" placeholder="输入消息,Enter 发送 / Shift+Enter 换行"></textarea>
-          <button class="btn primary" id="chat_send" type="button">发送</button>
-        </div>
-        <div class="note" style="margin-top:12px">每次发送使用当前编辑的 API 配置(未保存也生效);对话历史会作为上下文一并发送,模型可据此连续对话。</div>
+        <div class="note">配置按 profile 保存到 <code>api_config.json</code>。内置 profile(anthropic / openai_compatible / zhipu)不可删除或重命名。对话测试请到「AI 交互」页。</div>
       </div>
     </div>
   </div>
@@ -199,7 +165,7 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
 <script>
 const $=(s,p=document)=>p.querySelector(s);
 const BUILTIN=["anthropic","openai_compatible","zhipu"];
-const state={document:null,editing:"zhipu",active:"zhipu",dirty:false,showKey:false,loading:false,saving:false,chatSending:false,chat:[],error:""};
+const state={document:null,editing:"zhipu",active:"zhipu",dirty:false,showKey:false,loading:false,saving:false,error:""};
 
 function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
 
@@ -220,7 +186,6 @@ function profileNames(){
 function refreshButtons(){
   const busy=state.loading||state.saving;
   ["save_btn","reload_btn","add_btn"].forEach(id=>{const el=$("#"+id);if(el)el.disabled=busy;});
-  const send=$("#chat_send");if(send) send.disabled=busy||state.chatSending;
 }
 
 function setBusy(flag,kind){
@@ -235,7 +200,6 @@ function showError(message){
 }
 
 function renderStatus(){
-  if(state.chatSending){$("#status").innerHTML='<span class="spinner"></span> 对话中';return;}
   let txt=`生效: ${state.active||"-"}`;
   if(state.dirty) txt+='  <span class="dirty-dot">● 未保存</span>';
   $("#status").innerHTML=txt;
@@ -272,26 +236,10 @@ function renderEditorHead(){
   $("#activate_btn").style.display=isActive?"none":"";
 }
 
-function renderChat(){
-  const log=$("#chat_log");
-  if(!state.chat.length&&!state.chatSending){
-    log.innerHTML='<div class="chat-empty">输入消息开始对话(Enter 发送 / Shift+Enter 换行)。<br>每次发送使用当前编辑的 API 配置。</div>';
-    return;
-  }
-  let html=state.chat.map(m=>{
-    const cls=m.role==="user"?"user":(m.error?"assistant error":"assistant");
-    return `<div class="msg ${cls}">${esc(m.content)}</div>`;
-  }).join("");
-  if(state.chatSending) html+='<div class="msg-pending"><span class="spinner"></span> 正在回复...</div>';
-  log.innerHTML=html;
-  log.scrollTop=log.scrollHeight;
-}
-
 function render(){
   renderRail();
   renderEditorHead();
   renderStatus();
-  renderChat();
 }
 
 function loadProfileToForm(name){
@@ -434,34 +382,6 @@ async function saveConfig(){
   }
 }
 
-async function sendChat(presetText){
-  if(state.chatSending) return;
-  const text=(presetText!==undefined?String(presetText):$("#chat_input").value).trim();
-  if(!text) return;
-  $("#chat_input").value="";
-  state.chat=state.chat.concat([{role:"user",content:text}]);
-  state.chatSending=true;
-  refreshButtons();renderStatus();renderChat();
-  try{
-    const document=collectDocument();
-    const messages=state.chat.map(m=>({role:m.role,content:m.content}));
-    const system=$("#system_prompt").value.trim()||undefined;
-    const data=await api("/api/config/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({document,messages,system})});
-    state.chat=state.chat.concat([{role:"assistant",content:data.reply||"(空回复)"}]);
-  }catch(err){
-    state.chat=state.chat.concat([{role:"assistant",content:`[请求失败] ${err.message}`,error:true}]);
-  }finally{
-    state.chatSending=false;
-    refreshButtons();renderStatus();renderChat();
-  }
-}
-
-function clearChat(){
-  if(state.chatSending) return;
-  state.chat=[];
-  renderChat();
-}
-
 function toggleKey(){
   state.showKey=!state.showKey;
   $("#api_key").type=state.showKey?"text":"password";
@@ -474,15 +394,6 @@ function bindEvents(){
   $("#add_btn").addEventListener("click",addProfile);
   $("#activate_btn").addEventListener("click",()=>setActive(state.editing));
   $("#key_eye").addEventListener("click",toggleKey);
-  $("#chat_send").addEventListener("click",()=>sendChat());
-  $("#chat_clear").addEventListener("click",clearChat);
-  $("#sys_toggle").addEventListener("click",()=>{
-    const box=$("#sys_box");
-    box.style.display=box.style.display==="none"?"":"none";
-  });
-  $("#chat_input").addEventListener("keydown",(e)=>{
-    if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendChat();}
-  });
   $("#profile_list").addEventListener("click",(e)=>{
     const actBtn=e.target.closest("[data-act]");
     if(actBtn){
@@ -503,7 +414,6 @@ function bindEvents(){
 }
 
 bindEvents();
-renderChat();
 loadConfig();
 </script>
 </body>

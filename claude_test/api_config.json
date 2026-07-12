@@ -27,15 +27,15 @@
       "max_tokens": 4096
     },
     "zhipu": {
-      "api_type": "openai",
-      "base_url": "https://open.bigmodel.cn/api/paas/v4",
-      "api_url": "https://open.bigmodel.cn/api/anthropic",
-      "api_key": "783d58c0735349d6bdf72157a5c33de0.UFRetUyef8hZFiq7",
+      "api_type": "anthropic",
+      "base_url": "https://open.bigmodel.cn/api/anthropic",
+      "api_url": "https://open.bigmodel.cn/api/anthropic/v1/messages",
+      "api_key": "",
+      "auth_token": "783d58c0735349d6bdf72157a5c33de0.UFRetUyef8hZFiq7",
       "model": "glm-5.2",
+      "anthropic_version": "2023-06-01",
       "temperature": 0.2,
       "timeout_seconds": 60,
-      "request_url": "https://open.bigmodel.cn/api/anthropic",
-      "auth_token": "",
       "max_tokens": 4096
     }
   }
