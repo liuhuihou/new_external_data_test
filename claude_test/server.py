@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 from urllib import request, error
-from urllib.parse import unquote
+from urllib.parse import unquote, parse_qs, quote
 from xml.etree import ElementTree as ET
 
 from agents.data_testing_agent import DataTestingAgent
@@ -344,6 +344,86 @@ def parse_file(file_name: str, raw: bytes) -> dict[str, Any]:
     if lower.endswith(".xls"):
         raise ValueError("当前零依赖后端仅支持 CSV 和 XLSX；如需 XLS，请先另存为 XLSX 或安装扩展解析库")
     raise ValueError("仅支持 CSV、XLSX 文件")
+
+
+def merge_datasets(sample: dict[str, Any], vendor: dict[str, Any], key: str) -> tuple[dict[str, Any], dict[str, int]]:
+    """以测试样本为左表，left-join 厂商样本 on key。厂商字段与样本重名时加 vendor_ 前缀。"""
+    sample_headers = sample["headers"]
+    vendor_headers = vendor["headers"]
+    if key not in sample_headers:
+        raise ValueError(f"测试样本中不存在主键字段：{key}")
+    if key not in vendor_headers:
+        raise ValueError(f"厂商样本中不存在主键字段：{key}")
+
+    # 厂商字段（排除主键）重命名，避免与样本字段冲突
+    vendor_field_map: dict[str, str] = {}  # 原字段名 -> 合并后字段名
+    merged_headers = list(sample_headers)
+    for header in vendor_headers:
+        if header == key:
+            continue
+        new_header = f"vendor_{header}" if header in sample_headers else header
+        final_header = new_header
+        suffix = 1
+        while final_header in merged_headers:
+            final_header = f"{new_header}_{suffix}"
+            suffix += 1
+        merged_headers.append(final_header)
+        vendor_field_map[header] = final_header
+
+    # 厂商行按主键建索引（重复主键保留首条）
+    vendor_index: dict[str, dict[str, Any]] = {}
+    for row in vendor["rows"]:
+        k = clean_value(row.get(key))
+        if k and k not in vendor_index:
+            vendor_index[k] = row
+
+    # 合并描述行
+    merged_descriptions: dict[str, str] = dict(sample.get("descriptions") or {})
+    for original, final_header in vendor_field_map.items():
+        desc = (vendor.get("descriptions") or {}).get(original)
+        if desc:
+            merged_descriptions[final_header] = desc
+
+    merged_rows: list[dict[str, Any]] = []
+    matched = 0
+    for srow in sample["rows"]:
+        k = clean_value(srow.get(key))
+        vrow = vendor_index.get(k)
+        item = {h: srow.get(h, "") for h in sample_headers}
+        for original, final_header in vendor_field_map.items():
+            item[final_header] = vrow.get(original, "") if vrow else ""
+        merged_rows.append(item)
+        if vrow:
+            matched += 1
+
+    if not merged_rows:
+        raise ValueError("合并后没有数据行")
+
+    merged = {
+        "file_name": f"合并_{sample['file_name']}",
+        "sheet_name": "合并结果",
+        "uploaded_at": int(time.time()),
+        "headers": merged_headers,
+        "descriptions": merged_descriptions,
+        "rows": merged_rows,
+    }
+    stats = {
+        "merged_rows": len(merged_rows),
+        "merged_cols": len(merged_headers),
+        "matched": matched,
+    }
+    return merged, stats
+
+
+def dataset_to_csv_bytes(dataset: dict[str, Any]) -> bytes:
+    """把 dataset 序列化为带 UTF-8 BOM 的 CSV 字节，防中文乱码。"""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    headers = dataset["headers"]
+    writer.writerow(headers)
+    for row in dataset["rows"]:
+        writer.writerow([clean_value(row.get(h, "")) for h in headers])
+    return b"\xef\xbb\xbf" + buffer.getvalue().encode("utf-8")
 
 
 def unique_values(dataset: dict[str, Any], column: str, limit: int = 80) -> list[str]:
@@ -1359,9 +1439,13 @@ class Handler(BaseHTTPRequestHandler):
         return self.rfile.read(length)
 
     def do_GET(self) -> None:  # noqa: N802
-        path = unquote(self.path.split("?", 1)[0])
+        raw_path, _, query = self.path.partition("?")
+        path = unquote(raw_path)
         if path == "/api/config":
             self.send_json({"ok": True, **api_config_payload()})
+            return
+        if path == "/api/download":
+            self.handle_download(query)
             return
         if path in {"/", ""}:
             path = "/外部数据测试SOP工作台.html"
@@ -1377,6 +1461,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def handle_download(self, query: str) -> None:
+        params = parse_qs(query)
+        dataset_id = (params.get("datasetId") or [""])[0]
+        dataset = DATASETS.get(dataset_id)
+        if not dataset:
+            self.send_error_json("数据集不存在或已过期", 404)
+            return
+        body = dataset_to_csv_bytes(dataset)
+        stamp = time.strftime("%Y%m%d", time.localtime())
+        filename = quote(f"合并数据集_{stamp}.csv")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Disposition", f"attachment; filename=merged_{stamp}.csv; filename*=UTF-8''{filename}")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self) -> None:  # noqa: N802
         if self.path == "/api/chat/stream":
             self.handle_chat_stream()
@@ -1384,6 +1485,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.path == "/api/upload":
                 self.handle_upload()
+            elif self.path == "/api/merge":
+                self.handle_merge()
             elif self.path == "/api/analyze":
                 self.handle_analyze()
             elif self.path in {"/api/ai-report", "/api/report"}:
@@ -1411,6 +1514,46 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error_json(result.error)
             return
         self.send_json({"ok": True, **(result.data or {})})
+
+    def handle_merge(self) -> None:
+        payload = self.json_payload()
+        sample_id = payload.get("sampleId", "")
+        vendor_id = payload.get("vendorId", "")
+        key = clean_value(payload.get("key"))
+        sample = DATASETS.get(sample_id)
+        vendor = DATASETS.get(vendor_id)
+        if not sample:
+            self.send_error_json("测试样本数据集不存在，请重新上传")
+            return
+        if not vendor:
+            self.send_error_json("厂商样本数据集不存在，请重新上传")
+            return
+        if not key:
+            self.send_error_json("请选择主键字段")
+            return
+        try:
+            merged, stats = merge_datasets(sample, vendor, key)
+        except ValueError as exc:
+            self.send_error_json(str(exc), 400)
+            return
+        dataset_id = uuid.uuid4().hex
+        DATASETS[dataset_id] = merged
+        mapping = infer_mapping(merged)
+        self.send_json({
+            "ok": True,
+            "datasetId": dataset_id,
+            "fileName": merged["file_name"],
+            "sheetName": merged["sheet_name"],
+            "rows": len(merged["rows"]),
+            "cols": len(merged["headers"]),
+            "headers": merged["headers"],
+            "descriptions": merged["descriptions"],
+            "preview": merged["rows"][:12],
+            "mapping": mapping,
+            "numericColumns": numeric_columns(merged),
+            "badValueOptions": unique_values(merged, mapping["yCol"], 200) if mapping.get("yCol") else [],
+            "stats": stats,
+        })
 
     def handle_analyze(self) -> None:
         payload = self.json_payload()

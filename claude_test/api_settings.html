@@ -57,10 +57,8 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
 .pc-star{color:var(--warn)}
 .pc-model{font-size:12px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pc-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:#fff;text-transform:lowercase;flex:none}
-.pc-actions{display:none;position:absolute;top:6px;right:6px;gap:4px}
-.profile-card:hover .pc-actions,.profile-card.editing .pc-actions{display:inline-flex}
-.pc-actions button{border:1px solid var(--line);background:#fff;border-radius:6px;width:24px;height:24px;font-size:12px;cursor:pointer;line-height:1;padding:0}
-.pc-actions button:hover{background:var(--surface-2);border-color:var(--brand)}
+.pc-del{margin-top:10px;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 10px;border:1px solid #f0c4c4;background:#fdf1f1;color:var(--crit);border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer}
+.pc-del:hover{background:#fbebeb;border-color:var(--crit)}
 .editor-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
 .editor-head .title2{font-size:16px;font-weight:750;display:flex;align-items:center;gap:8px}
 .badge.active-badge{background:var(--brand-soft);color:var(--brand-ink);border-color:color-mix(in srgb,var(--brand) 25%,transparent)}
@@ -104,7 +102,10 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
       <div class="card">
         <div class="editor-head">
           <div class="title2">编辑:<span id="editing_name">zhipu</span><span id="editing_active_tag" class="badge active-badge" style="display:none">★ 当前生效</span></div>
-          <button class="btn mini" id="activate_btn" type="button" style="display:none">设为当前生效</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn mini" id="activate_btn" type="button">设为当前生效</button>
+            <button class="btn mini" id="delete_btn" type="button">删除此配置</button>
+          </div>
         </div>
         <div class="grid g2">
           <div>
@@ -156,7 +157,7 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
           <button id="save_btn" class="btn primary" type="button">保存配置</button>
           <button id="reload_btn" class="btn" type="button">刷新</button>
         </div>
-        <div class="note">配置按 profile 保存到 <code>api_config.json</code>。内置 profile(anthropic / openai_compatible / zhipu)不可删除或重命名。对话测试请到「AI 交互」页。</div>
+        <div class="note">「保存配置」写入 <code>api_config.json</code>;「设为当前生效」「删除此配置」点击后立即写盘生效。内置 profile(anthropic / openai_compatible / zhipu)不可删除。对话测试请到「AI 交互」页。</div>
       </div>
     </div>
   </div>
@@ -186,6 +187,7 @@ function profileNames(){
 function refreshButtons(){
   const busy=state.loading||state.saving;
   ["save_btn","reload_btn","add_btn"].forEach(id=>{const el=$("#"+id);if(el)el.disabled=busy;});
+  renderEditorHead();
 }
 
 function setBusy(flag,kind){
@@ -214,17 +216,14 @@ function renderRail(){
     const active=name===state.active;
     const model=p.model||"(未设置模型)";
     const type=p.api_type||"-";
-    const actions=isBuiltin(name)?"":`<span class="pc-actions">
-      <button type="button" title="重命名" data-act="rename" data-name="${esc(name)}">✏</button>
-      <button type="button" title="删除" data-act="delete" data-name="${esc(name)}">🗑</button>
-    </span>`;
+    const delBtn=isBuiltin(name)?"":`<button type="button" class="pc-del" title="删除此配置" data-act="delete" data-name="${esc(name)}">🗑 删除</button>`;
     return `<div class="profile-card${editing?" editing":""}${active?" active":""}" data-name="${esc(name)}">
-      ${actions}
       <div class="pc-row">
         <span class="pc-name">${active?'<span class="pc-star">★</span>':''}${esc(name)}</span>
         <span class="pc-badge">${esc(type)}</span>
       </div>
       <div class="pc-model">${esc(model)}</div>
+      ${delBtn}
     </div>`;
   }).join("");
 }
@@ -232,8 +231,15 @@ function renderRail(){
 function renderEditorHead(){
   $("#editing_name").textContent=state.editing||"-";
   const isActive=state.editing===state.active;
+  const builtin=isBuiltin(state.editing);
+  const busy=state.loading||state.saving;
   $("#editing_active_tag").style.display=isActive?"":"none";
-  $("#activate_btn").style.display=isActive?"none":"";
+  const actBtn=$("#activate_btn");
+  actBtn.disabled=isActive||busy;
+  actBtn.textContent=isActive?"✓ 已生效":"设为当前生效";
+  const delBtn=$("#delete_btn");
+  delBtn.disabled=builtin||busy;
+  delBtn.title=builtin?"内置配置不可删除":"删除此配置";
 }
 
 function render(){
@@ -281,12 +287,12 @@ function selectProfile(name){
   render();
 }
 
-function setActive(name){
+async function setActive(name){
   if(!state.document||!name||name===state.active) return;
   persistDraft();
   state.active=name;
-  state.dirty=true;
   render();
+  await saveDocument(`已切换生效配置:${name}`);
 }
 
 function nameTaken(name){
@@ -307,35 +313,16 @@ function addProfile(){
   render();
 }
 
-function renameProfile(old){
-  const name=(prompt(`将「${old}」重命名为:`,old)||"").trim();
-  if(!name||name===old) return;
-  const profiles=state.document.profiles||{};
-  const others={...profiles};delete others[old];
-  const taken=name==="ccswitch"||BUILTIN.includes(name)||Object.prototype.hasOwnProperty.call(others,name);
-  if(taken){alert(`名称「${name}」不可用或已存在`);return;}
-  persistDraft();
-  const content=profiles[old]||{};
-  const ordered={};
-  for(const k of Object.keys(profiles)){ordered[k===old?name:k]=k===old?content:profiles[k];}
-  state.document.profiles=ordered;
-  if(state.editing===old) state.editing=name;
-  if(state.active===old) state.active=name;
-  state.dirty=true;
-  render();
-}
-
-function deleteProfile(name){
-  if(isBuiltin(name)) return;
-  if(!confirm(`确认删除 Profile「${name}」?该操作需保存后生效。`)) return;
-  persistDraft();
+async function deleteProfile(name){
+  if(isBuiltin(name)){alert("内置配置不可删除");return;}
+  if(!confirm(`确认删除配置「${name}」?删除后立即生效,不可撤销。`)) return;
   const profiles=state.document.profiles||{};
   delete profiles[name];
   const fallback=profileNames()[0]||"zhipu";
   if(state.active===name) state.active=fallback;
   if(state.editing===name){state.editing=fallback;loadProfileToForm(fallback);}
-  state.dirty=true;
   render();
+  await saveDocument(`已删除配置:${name}`);
 }
 
 function collectDocument(){
@@ -368,7 +355,7 @@ async function loadConfig(){
   }
 }
 
-async function saveConfig(){
+async function saveDocument(okText){
   showError("");
   setBusy(true,"save");
   try{
@@ -376,10 +363,15 @@ async function saveConfig(){
     const data=await api("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({document})});
     applyDocument(data.document||document);
   }catch(err){
-    showError(`保存失败:${err.message}`);
+    showError(`操作失败:${err.message}`);
   }finally{
     setBusy(false,"save");
+    if(okText&&!state.error) $("#status").innerHTML=esc(okText);
   }
+}
+
+async function saveConfig(){
+  await saveDocument();
 }
 
 function toggleKey(){
@@ -393,14 +385,13 @@ function bindEvents(){
   $("#reload_btn").addEventListener("click",loadConfig);
   $("#add_btn").addEventListener("click",addProfile);
   $("#activate_btn").addEventListener("click",()=>setActive(state.editing));
+  $("#delete_btn").addEventListener("click",()=>deleteProfile(state.editing));
   $("#key_eye").addEventListener("click",toggleKey);
   $("#profile_list").addEventListener("click",(e)=>{
     const actBtn=e.target.closest("[data-act]");
     if(actBtn){
       e.stopPropagation();
-      const act=actBtn.dataset.act,name=actBtn.dataset.name;
-      if(act==="rename") renameProfile(name);
-      if(act==="delete") deleteProfile(name);
+      if(actBtn.dataset.act==="delete") deleteProfile(actBtn.dataset.name);
       return;
     }
     const card=e.target.closest(".profile-card");

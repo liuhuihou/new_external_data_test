@@ -1,5 +1,5 @@
 {
-  "active": "zhipu",
+  "active": "yunwu",
   "profiles": {
     "anthropic": {
       "api_type": "anthropic",
@@ -31,12 +31,25 @@
       "base_url": "https://open.bigmodel.cn/api/anthropic",
       "api_url": "https://open.bigmodel.cn/api/anthropic/v1/messages",
       "api_key": "",
-      "auth_token": "783d58c0735349d6bdf72157a5c33de0.UFRetUyef8hZFiq7",
       "model": "glm-5.2",
-      "anthropic_version": "2023-06-01",
       "temperature": 0.2,
       "timeout_seconds": 60,
-      "max_tokens": 4096
+      "auth_token": "783d58c0735349d6bdf72157a5c33de0.UFRetUyef8hZFiq7",
+      "anthropic_version": "2023-06-01",
+      "max_tokens": 4096,
+      "request_url": "https://open.bigmodel.cn/api/anthropic/v1/messages"
+    },
+    "yunwu": {
+      "api_type": "openai",
+      "api_url": "https://yunwu.ai/v1/chat/completions",
+      "base_url": "https://yunwu.ai/v1",
+      "api_key": "sk-DwKNBJYCRxPaYMFPrH91ZLXDgaXwemxJdbO5zJlLuQraMWCj",
+      "auth_token": "",
+      "model": "claude-sonnet-5",
+      "timeout_seconds": 60,
+      "temperature": 0.2,
+      "max_tokens": 4096,
+      "request_url": "https://yunwu.ai/v1/chat/completions"
     }
   }
 }

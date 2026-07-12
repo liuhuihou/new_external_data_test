@@ -58,9 +58,13 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
   <aside class="sidebar">
     <div class="brand"><div class="logo">ED</div><div><div class="t">外部数据测试</div><div class="s">后端分析工作台</div></div></div>
     <div class="nav-label">流程</div>
-    <div class="nav-item active" data-view="upload"><span class="num">1</span><span>上传数据</span></div>
-    <div class="nav-item" data-view="analyze"><span class="num">2</span><span>效果评估</span></div>
-    <div class="nav-item" data-view="report"><span class="num">3</span><span>智能报告</span></div>
+    <div class="nav-item" data-view="bg"><span class="num">1</span><span>测试背景</span></div>
+    <div class="nav-item" data-view="plan"><span class="num">2</span><span>方案设计</span></div>
+    <div class="nav-item active" data-view="import"><span class="num">3</span><span>数据导入</span></div>
+    <div class="nav-item" data-view="pre"><span class="num">4</span><span>数据预处理</span></div>
+    <div class="nav-item" data-view="split"><span class="num">5</span><span>数据集分割</span></div>
+    <div class="nav-item" data-view="analyze"><span class="num">6</span><span>数据分析</span></div>
+    <div class="nav-item" data-view="report"><span class="num">7</span><span>分析报告</span></div>
     <div class="nav-label">安全边界</div>
     <div class="note">原始数据只提交给本地后端。外部智能 API 只接收聚合指标，不发送客户明细。</div>
   </aside>
@@ -76,7 +80,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 <script>
 const $=(s,p=document)=>p.querySelector(s);
 const $$=(s,p=document)=>[...p.querySelectorAll(s)];
-const state={view:"upload",dataset:null,analysis:null,report:null,qualityMetrics:[],apiConfig:null,apiDocument:null,busy:false,error:"",savingConfig:false,testingConfig:false,testQuestion:"接口是否可用？",testReply:""};
+const state={view:"import",dataset:null,analysis:null,report:null,qualityMetrics:[],apiConfig:null,apiDocument:null,busy:false,error:"",savingConfig:false,testingConfig:false,testQuestion:"接口是否可用？",testReply:"",vendorDS:null,sampleDS:null,mergeStats:null,mergeKey:""};
 
 function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
 function fmtPct(v){return `${Number(v||0).toFixed(1)}%`;}
@@ -103,32 +107,115 @@ function goto(view){state.view=view;render();}
 function render(){
   $$(".nav-item").forEach(item=>item.classList.toggle("active",item.dataset.view===state.view));
   const c=$("#content");
-  c.innerHTML=state.view==="upload"?renderUpload():state.view==="analyze"?renderAnalyze():renderReportView();
-  if(state.view==="upload") afterUpload();
+  let html;
+  if(state.view==="import") html=renderImport();
+  else if(state.view==="analyze") html=renderAnalyze();
+  else if(state.view==="report") html=renderReportView();
+  else html=renderGuide(state.view);
+  c.innerHTML=html;
+  if(state.view==="import") afterImport();
   if(state.view==="analyze") afterAnalyze();
   if(state.view==="report") afterReport();
   renderStatus();
 }
 
+const GUIDE={
+  bg:{n:"1",t:"测试背景",d:"明确为什么测、测什么、用于哪种信贷业务场景。",cards:[
+    ["📊 数据类型","评分类数据 / 标签类数据 / 其他结构化变量"],
+    ["⚙️ 数据功能","识别社保、公积金缴纳情况等风险识别能力"],
+    ["🏦 业务场景","与行内信贷业务匹配度、适用客群与产品阶段、预期风控增益"]]},
+  plan:{n:"2",t:"方案设计 & 样本选择",d:"发送测试样本前，明确测试目的与产品，按厂商要求确定样本时间范围、数量、字段与加密方式。",cards:[
+    ["🎯 测试目的","验证变量有效性、排序性、审批增益等核心问题"],
+    ["🏢 厂商要求","样本总量上限 / 可回溯时间范围 / 必要参数字段 / 加密方式(SHA256/MD5)"],
+    ["🧱 样本宽表字段","主键、好坏样本标识、审批结论、风险表现(如 MOB6 30+)、日期时间字段"]]},
+  pre:{n:"4",t:"数据预处理",d:"对厂商返回的样本文件做全面质量检查。",cards:[
+    ["📝 核对数据","记录数与样本量是否一致、返回字段数量与字段名是否正确、区分变量字段与基础字段"],
+    ["🔍 检查字段值","字段类型(数值/文本)、数值型是否有负数、文本型是否含乱码或特殊字符、异常值处理"],
+    ["❓ 检查缺失值","识别缺失类型(NULL/空值)、判断是否填充特殊值、赋 0 或标记“未查得”"]]},
+  split:{n:"5",t:"数据集分割",d:"根据日期字段将数据分为分析样本与跨期样本(阶段 2 将开放交互)。",cards:[
+    ["📅 日期字段","可用申请日期、放款日期，或截取年份、年月份"],
+    ["🔬 分析样本","用于训练/分析"],
+    ["🧪 跨期样本","用于验证/稳定性(PSI)"]]},
+};
+
+function renderGuide(view){
+  const g=GUIDE[view];
+  if(!g) return `<h2 class="view-h">${esc(view)}</h2>`;
+  return `
+  <h2 class="view-h">${g.n}. ${esc(g.t)}</h2>
+  <p class="view-d">${esc(g.d)}</p>
+  <div class="grid g2" style="gap:16px">
+    ${g.cards.map(([h,b])=>`<div class="card"><div class="card-h"><h3>${esc(h)}</h3></div><p style="font-size:13px;color:var(--ink-2);margin:0">${esc(b)}</p></div>`).join("")}
+  </div>
+  <div class="note" style="margin-top:16px">本步骤为流程指引说明；功能操作请前往「数据导入 / 数据分析 / 分析报告」步骤。</div>`;
+}
+
 function renderError(){return state.error?`<div class="note error">${esc(state.error)}</div>`:"";}
 function mappingValue(key){return state.dataset?.mapping?.[key]||"";}
 
-function renderUpload(){
+function renderUploadCard(slot,ds,title,icon){
+  if(ds){
+    return `<div class="card">
+      <div class="card-h"><h3>${icon} ${title}</h3><span class="tag">${esc(ds.fileName)} · ${ds.rows.toLocaleString()} 行 · ${ds.cols} 列</span></div>
+      <div class="toolbar" style="margin:0">
+        <button class="btn" type="button" data-reupload="${slot}">重新上传</button>
+        <span class="note" style="margin:0">字段数 ${ds.cols}，记录数 ${ds.rows.toLocaleString()}</span>
+      </div>
+    </div>`;
+  }
+  return `<div class="card">
+    <div class="card-h"><h3>${icon} ${title}</h3><span class="tag">CSV / XLSX</span></div>
+    <div class="upload-zone" data-uploadzone="${slot}">
+      <input type="file" data-fileinput="${slot}" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+      <div class="ic">+</div>
+      <div class="tt">点击选择文件，或拖拽到这里</div>
+      <div class="ds">第一行应为字段名；第二行若为中文字段说明会自动排除。</div>
+    </div>
+  </div>`;
+}
+function renderMergePanel(){
+  const v=state.vendorDS,s=state.sampleDS;
+  if(!v||!s) return `<div class="note" style="margin-top:16px">请分别上传「厂商返回样本」与「测试样本」两个文件后，选择主键字段进行合并。</div>`;
+  const common=(v.headers||[]).filter(h=>(s.headers||[]).includes(h));
+  if(!common.length) return `<div class="note error" style="margin-top:16px">两个文件没有共同字段，无法按主键合并。请检查字段名是否一致。</div>`;
+  const key=state.mergeKey&&common.includes(state.mergeKey)?state.mergeKey:common[0];
+  return `<div class="card">
+    <div class="card-h"><h3>🔗 主键合并</h3><span class="tag">共同字段 ${common.length} 个</span></div>
+    <div class="grid g2">
+      <div><label>主键字段</label><select id="merge-key" class="select">${common.map(h=>`<option value="${esc(h)}" ${h===key?"selected":""}>${esc(h)}</option>`).join("")}</select></div>
+      <div style="align-self:end"><button class="btn primary" id="merge-btn">合并数据集</button></div>
+    </div>
+    <div class="note" style="margin-top:12px">以「测试样本」为主表左连接「厂商样本」；厂商字段与样本重名时自动加 vendor_ 前缀。</div>
+  </div>`;
+}
+function renderMergeResult(){
+  if(!state.dataset||!state.mergeStats) return "";
+  const st=state.mergeStats;
+  return `<div class="card">
+    <div class="card-h"><h3>✅ 合并结果</h3><span class="tag">${esc(state.dataset.fileName)}</span></div>
+    <div class="toolbar" style="margin:0 0 8px">
+      <span class="chip brand">合并记录 ${st.merged_rows.toLocaleString()}</span>
+      <span class="chip brand">字段数 ${st.merged_cols}</span>
+      <span class="chip brand">匹配成功 ${st.matched.toLocaleString()}</span>
+    </div>
+    <div class="toolbar" style="margin:0">
+      <button class="btn" type="button" onclick="window.location.href='/api/download?datasetId=${encodeURIComponent(state.dataset.datasetId)}'">⬇️ 下载合并 CSV</button>
+      <button class="btn primary" id="to-analyze-btn" type="button">用此数据集分析 →</button>
+    </div>
+  </div>`;
+}
+function renderImport(){
   return `
-  <h2 class="view-h">① 上传外部数据</h2>
-  <p class="view-d">上传 CSV 或 XLSX 文件。后端负责解析数据、推荐字段映射，前端只展示预览和交互控件。</p>
+  <h2 class="view-h">3. 数据导入</h2>
+  <p class="view-d">上传厂商返回样本与测试样本，按主键合并成分析宽表；也可只上传单个文件直接分析。</p>
   ${renderError()}
   ${renderApiConfig()}
-  <div class="card">
-    <div class="card-h"><h3>文件上传</h3><span class="tag">CSV / XLSX</span></div>
-    <div class="upload-zone" id="upload-zone">
-      <input id="file-input" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-      <div class="ic">+</div>
-      <div class="tt">点击选择文件，或拖拽文件到这里</div>
-      <div class="ds">第一行应为字段名；如果第二行是中文字段说明，后端会自动识别并排除。</div>
-      <div style="margin-top:12px"><span class="chip brand">本地后端解析</span><span class="chip brand">不暴露密钥</span></div>
-    </div>
+  <div class="grid g2" style="gap:16px">
+    ${renderUploadCard("sample",state.sampleDS,"测试样本","📋")}
+    ${renderUploadCard("vendor",state.vendorDS,"厂商返回样本","📦")}
   </div>
+  ${renderMergePanel()}
+  ${renderMergeResult()}
   ${state.dataset?renderDatasetPanel():""}
   `;
 }
@@ -178,18 +265,29 @@ function collectMapping(){
     variableCol:$("#map-var")?.value||mappingValue("variableCol"),
   };
 }
-function afterUpload(){
-  const zone=$("#upload-zone"),input=$("#file-input");
-  if(zone&&input){
+function afterImport(){
+  $$("[data-uploadzone]").forEach(zone=>{
+    const slot=zone.dataset.uploadzone;
+    const input=zone.querySelector("[data-fileinput]");
     zone.onclick=()=>input.click();
-    input.onchange=()=>uploadFile(input.files[0]);
+    input.onchange=()=>uploadSlot(slot,input.files[0]);
     zone.ondragover=e=>{e.preventDefault();zone.classList.add("drag");};
     zone.ondragleave=()=>zone.classList.remove("drag");
-    zone.ondrop=e=>{e.preventDefault();zone.classList.remove("drag");uploadFile(e.dataTransfer.files[0]);};
-  }
+    zone.ondrop=e=>{e.preventDefault();zone.classList.remove("drag");uploadSlot(slot,e.dataTransfer.files[0]);};
+  });
+  $$("[data-reupload]").forEach(btn=>{
+    btn.onclick=()=>{
+      const slot=btn.dataset.reupload;
+      if(slot==="vendor") state.vendorDS=null; else state.sampleDS=null;
+      render();
+    };
+  });
+  $("#merge-key")?.addEventListener("change",e=>{state.mergeKey=e.target.value;});
+  $("#merge-btn")?.addEventListener("click",mergeDatasets);
+  $("#to-analyze-btn")?.addEventListener("click",()=>{goto("analyze");});
   $("#analyze-btn")?.addEventListener("click",analyze);
 }
-async function uploadFile(file){
+async function uploadSlot(slot,file){
   if(!file) return;
   state.error="";
   setBusy(true);
@@ -197,10 +295,26 @@ async function uploadFile(file){
     const form=new FormData();
     form.append("file",file);
     const data=await api("/api/upload",{method:"POST",body:form});
+    if(slot==="vendor") state.vendorDS=data; else state.sampleDS=data;
+    // 单文件也可直接分析：若只有一个文件就绪，把它设为当前分析数据集
+    state.dataset=null;state.analysis=null;state.report=null;state.mergeStats=null;
+    if(state.sampleDS&&!state.vendorDS){state.dataset=state.sampleDS;}
+    else if(state.vendorDS&&!state.sampleDS){state.dataset=state.vendorDS;}
+  }catch(err){state.error=err.message;}
+  finally{setBusy(false);render();}
+}
+async function mergeDatasets(){
+  if(!state.vendorDS||!state.sampleDS) return;
+  const key=$("#merge-key")?.value||state.mergeKey;
+  if(!key){state.error="请选择主键字段";render();return;}
+  state.error="";
+  setBusy(true);
+  try{
+    const data=await api("/api/merge",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sampleId:state.sampleDS.datasetId,vendorId:state.vendorDS.datasetId,key})});
     state.dataset=data;
-    state.analysis=null;
-    state.report=null;
-    state.view="upload";
+    state.mergeStats=data.stats;
+    state.mergeKey=key;
+    state.analysis=null;state.report=null;
   }catch(err){state.error=err.message;}
   finally{setBusy(false);render();}
 }
@@ -221,7 +335,7 @@ async function analyze(){
 
 function renderAnalyze(){
   if(!state.analysis){
-    return `<h2 class="view-h">② 效果评估</h2><p class="view-d">请先上传数据并点击“开始后端分析”。</p>${renderError()}${renderApiConfig()}<div class="toolbar"><button class="btn primary" onclick="goto('upload')">返回上传</button></div>`;
+    return `<h2 class="view-h">② 效果评估</h2><p class="view-d">请先上传数据并点击“开始后端分析”。</p>${renderError()}${renderApiConfig()}<div class="toolbar"><button class="btn primary" onclick="goto('import')">返回上传</button></div>`;
   }
   const a=state.analysis,s=a.sample;
   return `
@@ -243,7 +357,7 @@ function renderAnalyze(){
     ${renderCutoffTable(a)}
   </div>
   <div class="card"><div class="card-h"><h3>3-C · 模型入模评估</h3><span class="tag">IV / KS / AUC / PSI</span></div><div class="grid g4">${renderModelTiles(a)}</div></div>
-  <div class="toolbar"><button class="btn primary" id="report-btn">调用 API 生成报告</button><button class="btn" onclick="goto('upload')">调整映射</button></div>`;
+  <div class="toolbar"><button class="btn primary" id="report-btn">调用 API 生成报告</button><button class="btn" onclick="goto('import')">调整映射</button></div>`;
 }
 function renderQuality(a){
   return `<table><thead><tr><th>指标</th><th class="num">实测值</th><th>标准</th><th>判定</th></tr></thead><tbody>${state.qualityMetrics.map(m=>{
@@ -284,7 +398,7 @@ async function generateReport(){
 }
 function renderReportView(){
   if(!state.analysis){
-    return `<h2 class="view-h">③ 智能报告</h2><p class="view-d">请先完成后端分析。</p>${renderError()}${renderApiConfig()}<div class="toolbar"><button class="btn primary" onclick="goto('upload')">返回上传</button></div>`;
+    return `<h2 class="view-h">③ 智能报告</h2><p class="view-d">请先完成后端分析。</p>${renderError()}${renderApiConfig()}<div class="toolbar"><button class="btn primary" onclick="goto('import')">返回上传</button></div>`;
   }
   const report=state.report;
   return `
