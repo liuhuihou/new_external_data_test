@@ -1,0 +1,19 @@
+# Python 编译缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 含真实 API Key 的本地配置(用 api_config.example.json 作模板)
+claude_test/api_config.json
+
+# 环境变量 / 密钥
+.env
+.env.*
+*.key
+
+# 操作系统 / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

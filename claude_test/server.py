@@ -150,6 +150,25 @@ def save_api_config_document(document: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+EXAMPLE_CONFIG_PATH = ROOT / "api_config.example.json"
+
+
+def ensure_api_config_file() -> bool:
+    """本地缺失 api_config.json 时自动补一份:优先用 api_config.example.json 作模板，
+    没有模板则用内置默认结构。已存在则不动。返回是否新建。"""
+    if CONFIG_PATH.exists():
+        return False
+    seed: dict[str, Any] | None = None
+    if EXAMPLE_CONFIG_PATH.exists():
+        try:
+            seed = json.loads(EXAMPLE_CONFIG_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            seed = None
+    document = normalize_api_config_document(seed) if seed else default_api_config_document()
+    CONFIG_PATH.write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
+
+
 def api_config_payload() -> dict[str, Any]:
     document = load_api_config_document()
     return {
@@ -496,6 +515,14 @@ def infer_mapping(dataset: dict[str, Any]) -> dict[str, str]:
         y_col = next((h for h in headers if re.search(r"(^|_)(y|label|target|bad|overdue|dpd)(_|$)", h, re.I)), "")
     bad_value = choose_bad_value(dataset, y_col) if y_col else ""
     query_col = next((h for h in headers if h != y_col and re.search(r"flag_apply|query|hit|查得|命中", h, re.I)), "")
+    date_col = ""
+    for h in headers:
+        if re.search(r"date|time|日期|时间|apply_dt|loan_dt|_dt$|year|month|年|月", h, re.I):
+            # 验证该列确实含可解析日期(取前若干非空值)
+            vals = unique_values(dataset, h, 10)
+            if any(parse_date(v) is not None for v in vals):
+                date_col = h
+                break
     nums = [c for c in numeric_columns(dataset) if c["name"] not in {y_col, query_col}]
     total = len(dataset["rows"])
 
@@ -517,7 +544,7 @@ def infer_mapping(dataset: dict[str, Any]) -> dict[str, str]:
     org = best([c for c in nums if re.search(r"orgnum|org_cnt|机构数|apply_org", c["name"] + " " + c["desc"], re.I)])
     broad = best([c for c in nums if re.search(r"apply|loan|alhc|借贷|申请", c["name"] + " " + c["desc"], re.I)])
     variable_col = exact or org or broad or best(nums)
-    return {"yCol": y_col, "badValue": bad_value, "queryFlagCol": query_col, "variableCol": variable_col}
+    return {"yCol": y_col, "badValue": bad_value, "queryFlagCol": query_col, "variableCol": variable_col, "dateCol": date_col}
 
 
 def is_bad(row: dict[str, Any], mapping: dict[str, str]) -> bool:
@@ -678,6 +705,73 @@ def calc_auc(values: list[dict[str, Any]], mapping: dict[str, str], total_bad: i
     return max(0.0, min(1.0, auc))
 
 
+def parse_date(value: Any) -> int | None:
+    """把常见日期格式归一为可比较整数 YYYYMMDD。
+    支持:2024-07-01 / 2024/7/1 / 20240701 / 202407(月→YYYYMM00) / 2024(年→YYYY0000)。
+    无法解析返回 None。"""
+    s = clean_value(value)
+    if not s:
+        return None
+    # 带分隔符:YYYY-MM-DD / YYYY/M/D
+    m = re.match(r"^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?", s)
+    if m:
+        y = int(m.group(1))
+        mo = int(m.group(2))
+        d = int(m.group(3)) if m.group(3) else 0
+        if 1 <= mo <= 12 and 0 <= d <= 31:
+            return y * 10000 + mo * 100 + d
+        return None
+    # 纯数字
+    digits = re.sub(r"\D", "", s)
+    if len(digits) == 8:  # YYYYMMDD
+        y, mo, d = int(digits[:4]), int(digits[4:6]), int(digits[6:8])
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return int(digits)
+        return None
+    if len(digits) == 6:  # YYYYMM
+        y, mo = int(digits[:4]), int(digits[4:6])
+        if 1 <= mo <= 12:
+            return y * 10000 + mo * 100
+        return None
+    if len(digits) == 4:  # YYYY
+        return int(digits) * 10000
+    return None
+
+
+def split_rows_by_date(rows: list[dict[str, Any]], date_col: str, threshold: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """按日期阈值切分:日期 < 阈值 = main(分析样本),>= 阈值 = oot(跨期样本),无法解析 = excluded。"""
+    main: list[dict[str, Any]] = []
+    oot: list[dict[str, Any]] = []
+    excluded: list[dict[str, Any]] = []
+    for row in rows:
+        d = parse_date(row.get(date_col))
+        if d is None:
+            excluded.append(row)
+        elif d < threshold:
+            main.append(row)
+        else:
+            oot.append(row)
+    return main, oot, excluded
+
+
+def _psi_dist(part: list[dict[str, Any]], bins: list[dict[str, Any]]) -> list[float]:
+    result = []
+    for item in bins:
+        count = sum(1 for row in part if item["_test"](row["value"]))
+        result.append((count + 0.5) / (len(part) + 0.5 * len(bins)))
+    return result
+
+
+def calc_psi_cross(main_values: list[dict[str, Any]], oot_values: list[dict[str, Any]], binning: dict[str, Any] | None) -> float | None:
+    """跨期 PSI:分析样本分箱分布 vs 跨期样本分箱分布。"""
+    if not binning or not binning.get("_bins") or len(main_values) < 10 or len(oot_values) < 10:
+        return None
+    bins = binning["_bins"]
+    before = _psi_dist(main_values, bins)
+    after = _psi_dist(oot_values, bins)
+    return sum((after[i] - before[i]) * math.log(after[i] / before[i]) for i in range(len(before)))
+
+
 def calc_psi(values: list[dict[str, Any]], binning: dict[str, Any] | None) -> float | None:
     if not binning or len(values) < 20:
         return None
@@ -801,7 +895,27 @@ def analyze_dataset(dataset: dict[str, Any], mapping: dict[str, str]) -> dict[st
     for key in ("yCol", "queryFlagCol", "variableCol"):
         if mapping.get(key) and mapping[key] not in dataset["headers"]:
             raise ValueError(f"字段不存在：{mapping[key]}")
-    rows = dataset["rows"]
+    all_rows = dataset["rows"]
+
+    # 判定是否启用按日期分割
+    date_col = mapping.get("dateCol")
+    split_raw = mapping.get("splitDate")
+    split_threshold = parse_date(split_raw) if split_raw else None
+    split_info = None
+    main_rows = all_rows
+    oot_rows: list[dict[str, Any]] = []
+    if date_col and date_col in dataset["headers"] and split_threshold is not None:
+        main_rows, oot_rows, excluded_rows = split_rows_by_date(all_rows, date_col, split_threshold)
+        split_info = {
+            "dateCol": date_col,
+            "splitDate": split_raw,
+            "mainCount": len(main_rows),
+            "ootCount": len(oot_rows),
+            "excludedCount": len(excluded_rows),
+        }
+
+    # 主分析跑在 main_rows(分割时=分析样本；未分割时=全量)
+    rows = main_rows
     total = len(rows)
     total_bad = sum(1 for row in rows if is_bad(row, mapping))
     total_good = sum(1 for row in rows if is_good(row, mapping))
@@ -811,6 +925,28 @@ def analyze_dataset(dataset: dict[str, Any], mapping: dict[str, str]) -> dict[st
     cutoff_rules = create_cutoff_rules(values, mapping, total, total_bad, total_good)
     quality = compute_quality(dataset, mapping, values, cutoff_rules, total, total_good)
     model_metrics = create_model_metrics(values, binning, mapping, total_bad, total_good)
+
+    # 分割时:PSI 改为跨期(分析样本 vs 跨期样本),并补 oot 摘要
+    if split_info is not None:
+        oot_values = [{"row": r, "value": to_number(r.get(mapping["variableCol"]), 0)} for r in oot_rows]
+        oot_values = [it for it in oot_values if it["value"] is not None]
+        oot_bad = sum(1 for r in oot_rows if is_bad(r, mapping))
+        oot_query = 0
+        if mapping.get("queryFlagCol"):
+            oot_query = sum(1 for r in oot_rows if truthy_flag(r.get(mapping["queryFlagCol"])))
+        psi_cross = calc_psi_cross(values, oot_values, binning)
+        split_info["mainBadPct"] = pct(total_bad, total)
+        split_info["ootBadPct"] = pct(oot_bad, len(oot_rows))
+        split_info["ootQueryRate"] = pct(oot_query, len(oot_rows)) if mapping.get("queryFlagCol") else None
+        split_info["psiCrossPeriod"] = psi_cross
+        for m in model_metrics:
+            if m["key"] == "psi":
+                m["value"] = psi_cross
+                m["display"] = "N/A" if psi_cross is None else f"{psi_cross * 100:.1f}"
+                m["unit"] = "" if psi_cross is None else "%"
+                m["desc"] = "分析样本 vs 跨期样本"
+                m["status"] = metric_status("psi", psi_cross)
+
     public_binning = None
     if binning:
         public_binning = {k: v for k, v in binning.items() if k != "_bins"}
@@ -818,7 +954,7 @@ def analyze_dataset(dataset: dict[str, Any], mapping: dict[str, str]) -> dict[st
         "dataset": {
             "fileName": dataset["file_name"],
             "sheetName": dataset["sheet_name"],
-            "rows": total,
+            "rows": len(all_rows),
             "cols": len(dataset["headers"]),
         },
         "mapping": mapping,
@@ -828,6 +964,7 @@ def analyze_dataset(dataset: dict[str, Any], mapping: dict[str, str]) -> dict[st
             "totalGood": total_good,
             "badPct": pct(total_bad, total),
         },
+        "split": split_info,
         "quality": quality,
         "qualityJudgement": {m["key"]: status_label(status_of(m, quality.get(m["key"], 0))) for m in QUALITY_METRICS},
         "binning": public_binning,
@@ -1487,6 +1624,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.handle_upload()
             elif self.path == "/api/merge":
                 self.handle_merge()
+            elif self.path == "/api/split-preview":
+                self.handle_split_preview()
             elif self.path == "/api/analyze":
                 self.handle_analyze()
             elif self.path in {"/api/ai-report", "/api/report"}:
@@ -1553,6 +1692,35 @@ class Handler(BaseHTTPRequestHandler):
             "numericColumns": numeric_columns(merged),
             "badValueOptions": unique_values(merged, mapping["yCol"], 200) if mapping.get("yCol") else [],
             "stats": stats,
+        })
+
+    def handle_split_preview(self) -> None:
+        payload = self.json_payload()
+        dataset = DATASETS.get(payload.get("datasetId", ""))
+        if not dataset:
+            self.send_error_json("数据集不存在或已过期,请重新导入", 400)
+            return
+        date_col = clean_value(payload.get("dateCol"))
+        if not date_col or date_col not in dataset["headers"]:
+            self.send_error_json("请选择有效的日期字段", 400)
+            return
+        threshold = parse_date(payload.get("splitDate"))
+        if threshold is None:
+            self.send_error_json("请输入有效的分割日期(如 2024-07-01)", 400)
+            return
+        main, oot, excluded = split_rows_by_date(dataset["rows"], date_col, threshold)
+        parsed = [parse_date(r.get(date_col)) for r in dataset["rows"]]
+        parsed = [p for p in parsed if p is not None]
+        def fmt(d):
+            s = str(d)
+            return f"{s[:4]}-{s[4:6]}-{s[6:8]}" if len(s) == 8 else s
+        self.send_json({
+            "ok": True,
+            "mainCount": len(main),
+            "ootCount": len(oot),
+            "excludedCount": len(excluded),
+            "minDate": fmt(min(parsed)) if parsed else "",
+            "maxDate": fmt(max(parsed)) if parsed else "",
         })
 
     def handle_analyze(self) -> None:
@@ -1651,6 +1819,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     os.chdir(ROOT)
+    if ensure_api_config_file():
+        print(f"未找到 api_config.json，已自动生成模板：{CONFIG_PATH}（请在设置页填入 API Key）")
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     api_config = load_api_config()
     print(f"External data workbench running at http://{HOST}:{PORT}/")

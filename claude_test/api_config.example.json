@@ -1,55 +1,51 @@
 {
-  "active": "yunwu",
+  "active": "zhipu",
   "profiles": {
     "anthropic": {
       "api_type": "anthropic",
       "base_url": "https://api.anthropic.com",
+      "api_url": "",
       "api_key": "",
       "auth_token": "",
       "model": "claude-3-5-sonnet-20241022",
       "anthropic_version": "2023-06-01",
       "temperature": 0.2,
       "max_tokens": 4096,
-      "timeout_seconds": 60,
-      "api_url": "",
-      "request_url": ""
+      "timeout_seconds": 60
     },
     "openai_compatible": {
       "api_type": "openai",
       "api_url": "https://api.openai.com/v1/chat/completions",
+      "base_url": "",
       "api_key": "",
+      "auth_token": "",
       "model": "gpt-4.1-mini",
       "temperature": 0.2,
-      "timeout_seconds": 60,
-      "request_url": "https://api.openai.com/v1/chat/completions",
-      "base_url": "",
-      "auth_token": "",
-      "max_tokens": 4096
+      "max_tokens": 4096,
+      "timeout_seconds": 60
     },
     "zhipu": {
       "api_type": "anthropic",
       "base_url": "https://open.bigmodel.cn/api/anthropic",
       "api_url": "https://open.bigmodel.cn/api/anthropic/v1/messages",
       "api_key": "",
+      "auth_token": "在此填入你的智谱 API Key",
       "model": "glm-5.2",
-      "temperature": 0.2,
-      "timeout_seconds": 60,
-      "auth_token": "783d58c0735349d6bdf72157a5c33de0.UFRetUyef8hZFiq7",
       "anthropic_version": "2023-06-01",
+      "temperature": 0.2,
       "max_tokens": 4096,
-      "request_url": "https://open.bigmodel.cn/api/anthropic/v1/messages"
+      "timeout_seconds": 60
     },
     "yunwu": {
       "api_type": "openai",
       "api_url": "https://yunwu.ai/v1/chat/completions",
       "base_url": "https://yunwu.ai/v1",
-      "api_key": "sk-DwKNBJYCRxPaYMFPrH91ZLXDgaXwemxJdbO5zJlLuQraMWCj",
+      "api_key": "在此填入你的云雾 API Key",
       "auth_token": "",
       "model": "claude-sonnet-5",
-      "timeout_seconds": 60,
       "temperature": 0.2,
       "max_tokens": 4096,
-      "request_url": "https://yunwu.ai/v1/chat/completions"
+      "timeout_seconds": 60
     }
   }
 }

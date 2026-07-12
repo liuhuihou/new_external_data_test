@@ -80,7 +80,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 <script>
 const $=(s,p=document)=>p.querySelector(s);
 const $$=(s,p=document)=>[...p.querySelectorAll(s)];
-const state={view:"import",dataset:null,analysis:null,report:null,qualityMetrics:[],apiConfig:null,apiDocument:null,busy:false,error:"",savingConfig:false,testingConfig:false,testQuestion:"接口是否可用？",testReply:"",vendorDS:null,sampleDS:null,mergeStats:null,mergeKey:""};
+const state={view:"import",dataset:null,analysis:null,report:null,qualityMetrics:[],apiConfig:null,apiDocument:null,busy:false,error:"",savingConfig:false,testingConfig:false,testQuestion:"接口是否可用？",testReply:"",vendorDS:null,sampleDS:null,mergeStats:null,mergeKey:"",splitPreview:null};
 
 function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
 function fmtPct(v){return `${Number(v||0).toFixed(1)}%`;}
@@ -109,11 +109,13 @@ function render(){
   const c=$("#content");
   let html;
   if(state.view==="import") html=renderImport();
+  else if(state.view==="split") html=renderSplit();
   else if(state.view==="analyze") html=renderAnalyze();
   else if(state.view==="report") html=renderReportView();
   else html=renderGuide(state.view);
   c.innerHTML=html;
   if(state.view==="import") afterImport();
+  if(state.view==="split") afterSplit();
   if(state.view==="analyze") afterAnalyze();
   if(state.view==="report") afterReport();
   renderStatus();
@@ -263,7 +265,65 @@ function collectMapping(){
     badValue:$("#map-bad")?.value||mappingValue("badValue"),
     queryFlagCol:$("#map-query")?.value||"",
     variableCol:$("#map-var")?.value||mappingValue("variableCol"),
+    dateCol:$("#map-date")?.value??mappingValue("dateCol"),
+    splitDate:$("#split-date")?.value??(state.dataset?.mapping?.splitDate||""),
   };
+}
+function renderSplit(){
+  if(!state.dataset){
+    return `<h2 class="view-h">5. 数据集分割</h2><p class="view-d">请先在「数据导入」步骤上传或合并数据集。</p>${renderError()}<div class="toolbar"><button class="btn primary" onclick="goto('import')">去数据导入</button></div>`;
+  }
+  const headers=state.dataset.headers||[];
+  const curDate=mappingValue("dateCol");
+  const curSplit=state.dataset?.mapping?.splitDate||"";
+  const pv=state.splitPreview;
+  return `
+  <h2 class="view-h">5. 数据集分割</h2>
+  <p class="view-d">按日期字段将数据切成「分析样本」(阈值之前)与「跨期样本」(阈值及之后)。跨期样本用于验证稳定性(PSI)。不选则不分割。</p>
+  ${renderError()}
+  <div class="card">
+    <div class="card-h"><h3>分割设置</h3><span class="tag">${esc(state.dataset.fileName)} · ${state.dataset.rows.toLocaleString()} 行</span></div>
+    <div class="grid g2">
+      <div><label>日期字段</label><select id="map-date" class="select"><option value="">不分割</option>${headers.map(h=>`<option value="${esc(h)}" ${h===curDate?"selected":""}>${esc(label(h))}</option>`).join("")}</select></div>
+      <div><label>分割日期(阈值)</label><input id="split-date" class="input" value="${esc(curSplit)}" placeholder="如 2024-07-01"></div>
+    </div>
+    <div class="toolbar"><button class="btn" id="preview-split-btn">预览分割</button><button class="btn primary" id="apply-split-btn">应用并去分析 →</button></div>
+    <div class="note">支持格式:2024-07-01 / 20240701 / 202407(月) / 2024(年)。日期无法解析的行将被排除。</div>
+  </div>
+  ${pv?`<div class="card">
+    <div class="card-h"><h3>分割预览</h3><span class="tag">日期范围 ${esc(pv.minDate)} ~ ${esc(pv.maxDate)}</span></div>
+    <div class="toolbar" style="margin:0">
+      <span class="chip brand">分析样本 ${pv.mainCount.toLocaleString()}</span>
+      <span class="chip brand">跨期样本 ${pv.ootCount.toLocaleString()}</span>
+      <span class="chip">排除(日期无效) ${pv.excludedCount.toLocaleString()}</span>
+    </div>
+  </div>`:""}
+  `;
+}
+function afterSplit(){
+  $("#preview-split-btn")?.addEventListener("click",previewSplit);
+  $("#apply-split-btn")?.addEventListener("click",applySplit);
+}
+async function previewSplit(){
+  const dateCol=$("#map-date")?.value||"";
+  const splitDate=$("#split-date")?.value||"";
+  if(!dateCol){state.error="请选择日期字段";render();return;}
+  if(!splitDate){state.error="请输入分割日期";render();return;}
+  state.error="";setBusy(true);
+  try{
+    const data=await api("/api/split-preview",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({datasetId:state.dataset.datasetId,dateCol,splitDate})});
+    state.splitPreview=data;
+  }catch(err){state.error=err.message;state.splitPreview=null;}
+  finally{setBusy(false);render();}
+}
+function applySplit(){
+  const dateCol=$("#map-date")?.value||"";
+  const splitDate=$("#split-date")?.value||"";
+  state.dataset.mapping=state.dataset.mapping||{};
+  state.dataset.mapping.dateCol=dateCol;
+  state.dataset.mapping.splitDate=splitDate;
+  state.analysis=null;state.report=null;
+  goto("analyze");
 }
 function afterImport(){
   $$("[data-uploadzone]").forEach(zone=>{
@@ -349,6 +409,7 @@ function renderAnalyze(){
     <div class="tile"><div class="tlbl">分析变量</div><div class="tval" style="font-size:18px">${esc(a.mapping.variableCol)}</div><div class="tdelta">后端按该字段计算</div></div>
     <div class="tile"><div class="tlbl">数据文件</div><div class="tval" style="font-size:18px">${esc(a.dataset.fileName)}</div><div class="tdelta">${a.dataset.rows.toLocaleString()} 行 · ${a.dataset.cols} 列</div></div>
   </div>
+  ${renderSplitSummary(a)}
   <div class="card"><div class="card-h"><h3>3-A · 数据质量</h3><span class="tag">后端计算</span></div>${renderQuality(a)}</div>
   <div class="card"><div class="card-h"><h3>3-B · 策略效果</h3><span class="tag">分箱与 Cutoff</span></div>
     <div class="chart-wrap" id="binning-chart"></div>
@@ -357,7 +418,27 @@ function renderAnalyze(){
     ${renderCutoffTable(a)}
   </div>
   <div class="card"><div class="card-h"><h3>3-C · 模型入模评估</h3><span class="tag">IV / KS / AUC / PSI</span></div><div class="grid g4">${renderModelTiles(a)}</div></div>
-  <div class="toolbar"><button class="btn primary" id="report-btn">调用 API 生成报告</button><button class="btn" onclick="goto('import')">调整映射</button></div>`;
+  <div class="toolbar"><button class="btn primary" id="report-btn">调用 API 生成报告</button><button class="btn" onclick="goto('import')">调整映射</button><button class="btn" onclick="goto('split')">数据集分割</button></div>`;
+}
+function renderSplitSummary(a){
+  const sp=a.split;
+  if(!sp) return "";
+  const psi=sp.psiCrossPeriod;
+  const psiTxt=psi==null?"N/A":`${(psi*100).toFixed(1)}%`;
+  const psiChip=psi==null?'<span class="chip">无法计算</span>':(psi<=0.1?'<span class="chip good">稳定</span>':(psi<=0.25?'<span class="chip warn">需关注</span>':'<span class="chip crit">不稳定</span>'));
+  const ootQuery=sp.ootQueryRate==null?"":`　跨期查得率 ${fmtPct(sp.ootQueryRate)}`;
+  return `<div class="card">
+    <div class="card-h"><h3>数据集分割(按日期)</h3><span class="tag">${esc(sp.dateCol)} · 阈值 ${esc(sp.splitDate)}</span></div>
+    <div class="toolbar" style="margin:0 0 10px">
+      <span class="chip brand">分析样本 ${sp.mainCount.toLocaleString()}</span>
+      <span class="chip brand">跨期样本 ${sp.ootCount.toLocaleString()}</span>
+      <span class="chip">排除 ${sp.excludedCount.toLocaleString()}</span>
+    </div>
+    <div class="note" style="margin:0">
+      坏样本占比:分析样本 ${fmtPct(sp.mainBadPct)} vs 跨期样本 ${fmtPct(sp.ootBadPct)}${ootQuery}<br>
+      跨期稳定性 PSI(分析样本分箱 vs 跨期样本分箱):<strong>${psiTxt}</strong> ${psiChip}
+    </div>
+  </div>`;
 }
 function renderQuality(a){
   return `<table><thead><tr><th>指标</th><th class="num">实测值</th><th>标准</th><th>判定</th></tr></thead><tbody>${state.qualityMetrics.map(m=>{
