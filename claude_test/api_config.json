@@ -1,18 +1,6 @@
 {
   "active": "zhipu",
   "profiles": {
-    "ccswitch": {
-      "api_type": "anthropic",
-      "ccswitch": {
-        "enabled": true,
-        "config_path": "",
-        "profile": ""
-      },
-      "model": "claude-3-5-sonnet-20241022",
-      "temperature": 0.2,
-      "max_tokens": 4096,
-      "timeout_seconds": 60
-    },
     "anthropic": {
       "api_type": "anthropic",
       "base_url": "https://api.anthropic.com",
@@ -22,7 +10,9 @@
       "anthropic_version": "2023-06-01",
       "temperature": 0.2,
       "max_tokens": 4096,
-      "timeout_seconds": 60
+      "timeout_seconds": 60,
+      "api_url": "",
+      "request_url": ""
     },
     "openai_compatible": {
       "api_type": "openai",
@@ -30,24 +20,23 @@
       "api_key": "",
       "model": "gpt-4.1-mini",
       "temperature": 0.2,
-      "timeout_seconds": 60
+      "timeout_seconds": 60,
+      "request_url": "https://api.openai.com/v1/chat/completions",
+      "base_url": "",
+      "auth_token": "",
+      "max_tokens": 4096
     },
     "zhipu": {
       "api_type": "openai",
       "base_url": "https://open.bigmodel.cn/api/paas/v4",
-      "api_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+      "api_url": "https://open.bigmodel.cn/api/anthropic",
       "api_key": "783d58c0735349d6bdf72157a5c33de0.UFRetUyef8hZFiq7",
       "model": "glm-5.2",
       "temperature": 0.2,
       "timeout_seconds": 60,
-      "request_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+      "request_url": "https://open.bigmodel.cn/api/anthropic",
       "auth_token": "",
-      "max_tokens": 4096,
-      "ccswitch": {
-        "enabled": false,
-        "config_path": "",
-        "profile": ""
-      }
+      "max_tokens": 4096
     }
   }
 }

@@ -4,66 +4,36 @@
 
 ## 1. 前端配置
 
-在网页顶部的 API 配置区可以直接填写：
+打开独立的「API 设置」页（`api_settings.html`，可从工作台右上角进入），采用左右双栏的 Profile 管理：
 
-- `请求地址`
-- `API Key`
-- `Auth Token`
-- `模型`
-- `超时`
-- `Temperature`
-- `Max tokens`
-- `ccswitch 配置路径`
-- `ccswitch Profile`
+**左栏 — Profiles 列表**
 
-点“保存配置”后会写回 `api_config.json`。
+- 每个 Profile 一张卡片，显示名称、模型、API 类型。
+- ★ 标记当前生效（active）的 Profile；高亮边框标记正在编辑的 Profile。
+- `+ 新增` 创建自定义 Profile；卡片上的 ✏ 重命名、🗑 删除（仅自定义 Profile 可改；内置 `anthropic` / `openai_compatible` / `zhipu` 不可删改）。
+- 点击卡片 = 选中编辑，不会改动当前生效项。
 
-## 2. 默认：ccswitch
+**右栏 — 编辑区**
 
-默认配置：
+- 顶部「设为当前生效」可把正在编辑的 Profile 切为 active；API Key 输入框右侧 👁 可显示/隐藏。
+- 字段：API 类型、模型、请求地址、Base URL、API Key、Auth Token、超时、Temperature、Max tokens。
+- `保存配置` 写回 `api_config.json`；`连通性测试` 用当前表单内容即时调用，不写盘（未保存也能测）。
 
-```json
-{
-  "active": "ccswitch"
-}
-```
+## 2. 默认：zhipu
 
-后端会优先读取：
-
-- `./ccswitch.json`
-- `./.ccswitch.json`
-- `./ccswitch.config.json`
-- `~/.ccswitch/config.json`
-- `~/.claude/ccswitch.json`
-- `~/.claude/ccswitch/config.json`
-
-也可以在 `api_config.json` 中显式指定：
+工作区默认预置 `zhipu` profile，走 OpenAI 兼容接口调用智谱 GLM：
 
 ```json
 {
-  "active": "ccswitch",
-  "profiles": {
-    "ccswitch": {
-      "ccswitch": {
-        "enabled": true,
-        "config_path": "E:/path/to/ccswitch.json",
-        "profile": "your-profile-name"
-      }
-    }
-  }
+  "active": "zhipu"
 }
 ```
 
-支持读取的 ccswitch 环境字段：
+`zhipu` profile 已配好请求地址与模型，只需在 `api_config.json` 或网页配置区填入 API Key 即可：
 
-- `ANTHROPIC_BASE_URL`
-- `ANTHROPIC_API_KEY`
-- `ANTHROPIC_AUTH_TOKEN`
-- `ANTHROPIC_MODEL`
-- `ANTHROPIC_SMALL_FAST_MODEL`
-- `OPENAI_BASE_URL`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
+- `api_type`：`openai`
+- `api_url`：`https://open.bigmodel.cn/api/paas/v4/chat/completions`
+- `model`：`glm-5.2`
 
 ## 3. Anthropic / Claude
 
@@ -119,7 +89,7 @@
 
 - `active`：当前启用的 profile
 - `profiles`：profile 集合
-- `api_type`：`anthropic` / `openai` / `ccswitch`
+- `api_type`：`anthropic` / `openai`
 - `api_url`：完整请求地址
 - `base_url`：基础地址，Anthropic 会自动补 `/v1/messages`
 - `api_key`：API Key

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 交互 · cli</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{background:#0d1117;color:#c9d1d9;font-family:Consolas,"Cascadia Code","SF Mono",Menlo,monospace}
+.terminal{max-width:1040px;margin:0 auto;display:flex;flex-direction:column;height:100vh}
+.term-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #30363d;background:#161b22}
+.term-head .dot{width:10px;height:10px;border-radius:50%;background:#3fb950;flex:none}
+.term-head .title{font-weight:700;color:#e6edf3;font-size:14px}
+.term-head .status{margin-left:auto;font-size:12px;color:#8b949e}
+.term-head button{background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:5px 12px;cursor:pointer;font:inherit;font-size:13px}
+.term-head button:hover{background:#30363d}
+.term-info{padding:6px 14px;font-size:12px;color:#8b949e;border-bottom:1px solid #30363d;background:#0d1117;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.term-info b{color:#79c0ff;font-weight:600}
+.term-body{flex:1;overflow-y:auto;padding:14px;font-size:14px;line-height:1.65}
+.line{margin-bottom:11px;white-space:pre-wrap;word-break:break-word}
+.line.user{color:#79c0ff}
+.line.user::before{content:"> ";color:#3fb950;font-weight:700}
+.line.assistant{color:#c9d1d9}
+.line.system{color:#8b949e;font-size:12.5px}
+.line.system b{color:#79c0ff}
+.line.error{color:#f85149}
+.cmd{color:#d2a8ff}
+.cursor{color:#3fb950;animation:blink 1s steps(2,start) infinite}
+@keyframes blink{50%{opacity:0}}
+.term-input{display:flex;align-items:flex-end;gap:8px;padding:12px 14px;border-top:1px solid #30363d;background:#161b22}
+.term-input .prompt{color:#3fb950;font-weight:700;padding:8px 0 9px;flex:none}
+.term-input textarea{flex:1;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:8px 10px;font:inherit;font-size:14px;resize:none;min-height:36px;max-height:160px;line-height:1.5}
+.term-input textarea:focus{outline:none;border-color:#58a6ff}
+.term-input button{background:#238636;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font:inherit;font-weight:700;font-size:13px;flex:none}
+.term-input button:disabled{opacity:.5;cursor:not-allowed}
+.term-input button:hover:not(:disabled){background:#2ea043}
+</style>
+</head>
+<body>
+<div class="terminal">
+  <div class="term-head">
+    <span class="dot"></span>
+    <span class="title">AI 交互 · cli</span>
+    <span class="status" id="status">启动中</span>
+    <button type="button" onclick="window.location.href='外部数据测试SOP工作台.html'">返回工作台</button>
+  </div>
+  <div class="term-info" id="info">profile: -  |  model: -</div>
+  <div class="term-body" id="body"></div>
+  <div class="term-input">
+    <span class="prompt">&gt;</span>
+    <textarea id="input" rows="1" placeholder="输入消息,Enter 发送 / Shift+Enter 换行。输入 /help 查看命令"></textarea>
+    <button id="send" type="button">发送</button>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const state={document:null,active:"zhipu",model:"",system:null,messages:[],sending:false};
+
+function esc(v){return String(v??"").replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));}
+function scrollBottom(){$("#body").scrollTop=$("#body").scrollHeight;}
+function setStatus(t){$("#status").textContent=t;}
+function renderInfo(){
+  const sys=state.system?("  |  system: "+state.system):"";
+  $("#info").innerHTML=`profile: <b>${esc(state.active||"-")}</b>  |  model: <b>${esc(state.model||"-")}</b>${sys}`;
+}
+function printLine(html,cls){
+  const div=document.createElement("div");
+  div.className="line "+(cls||"");
+  div.innerHTML=html;
+  $("#body").appendChild(div);
+  scrollBottom();
+  return div;
+}
+
+async function loadConfig(){
+  setStatus("加载配置…");
+  try{
+    const r=await fetch("/api/config");const d=await r.json();
+    state.document=d.document;
+    state.active=d.document.active;
+    const p=(d.document.profiles||{})[state.active]||{};
+    state.model=p.model||(d.config&&d.config.model)||"-";
+    renderInfo();
+    setStatus("就绪");
+    printLine(`已连接。当前模型 <b>${esc(state.model)}</b>(profile: ${esc(state.active)})。直接输入消息对话,或输入 <span class="cmd">/help</span> 查看命令。`,"system");
+  }catch(e){
+    setStatus("配置加载失败");
+    printLine("配置加载失败: "+esc(e.message),"error");
+  }
+}
+
+function helpCmd(){
+  printLine(`<span class="cmd">/help</span>            显示命令
+<span class="cmd">/clear</span>           清空当前对话
+<span class="cmd">/new</span>             开启新会话(清空 + 重置 system)
+<span class="cmd">/model</span>           查看当前 profile 与可用列表
+<span class="cmd">/model &lt;name&gt;</span>    切换 profile(写回 api_config.json)
+<span class="cmd">/system &lt;text&gt;</span>   设置本会话系统提示词
+<span class="cmd">/system</span>           清除系统提示词(恢复默认)`,"system");
+}
+
+async function modelCmd(arg){
+  const names=Object.keys(state.document&&state.document.profiles||{}).filter(n=>n!=="ccswitch");
+  if(!arg){printLine("当前 profile: "+state.active+"\n可用: "+(names.join(", ")||"-"),"system");return;}
+  if(!names.includes(arg)){printLine("找不到 profile: "+arg+"\n可用: "+names.join(", "),"error");return;}
+  if(arg===state.active){printLine("已是当前 profile: "+arg,"system");return;}
+  try{
+    const body={active:arg,profiles:state.document.profiles};
+    const r=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({document:body})});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const d=await r.json();
+    state.document=d.document||body;
+    state.active=arg;
+    const p=(state.document.profiles||{})[arg]||{};
+    state.model=p.model||state.model;
+    renderInfo();
+    printLine("已切换 profile: "+arg+"  (model: "+state.model+")","system");
+  }catch(e){printLine("切换失败: "+esc(e.message),"error");}
+}
+
+function handleCommand(text){
+  const parts=text.trim().split(/\s+/);
+  const cmd=parts[0];const arg=parts.slice(1).join(" ");
+  if(cmd==="/help"){helpCmd();}
+  else if(cmd==="/clear"){state.messages=[];$("#body").innerHTML="";printLine("对话已清空。","system");}
+  else if(cmd==="/new"){state.messages=[];state.system=null;$("#body").innerHTML="";renderInfo();printLine("新会话已开启。","system");}
+  else if(cmd==="/system"){
+    if(!arg){state.system=null;renderInfo();printLine("已清除系统提示词,恢复默认。","system");}
+    else{state.system=arg;renderInfo();printLine("已设置系统提示词: "+arg,"system");}
+  }
+  else if(cmd==="/model"){modelCmd(arg);}
+  else{printLine("未知命令: "+cmd+"。输入 /help 查看可用命令。","error");}
+}
+
+function autoSize(){const t=$("#input");t.style.height="auto";t.style.height=Math.min(160,t.scrollHeight)+"px";}
+function setSending(b){$("#send").disabled=b;}
+
+async function sendChat(){
+  if(state.sending) return;
+  const text=$("#input").value.trim();
+  if(!text) return;
+  $("#input").value="";autoSize();
+  if(text.startsWith("/")){printLine('<span class="cmd">'+esc(text)+'</span>',"user");handleCommand(text);return;}
+  printLine(esc(text),"user");
+  state.messages=state.messages.concat([{role:"user",content:text}]);
+  state.sending=true;setSending(true);setStatus("对话中…");
+  const line=printLine('<span class="content"></span><span class="cursor">▌</span>',"assistant");
+  const content=line.querySelector(".content");
+  let acc="",failed=null;
+  try{
+    const body={document:state.document,messages:state.messages,system:state.system};
+    const resp=await fetch("/api/chat/stream",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if(!resp.ok||!resp.body){throw new Error("HTTP "+resp.status);}
+    const reader=resp.body.getReader();const dec=new TextDecoder();let buf="",finished=false;
+    while(!finished){
+      const {done,value}=await reader.read();
+      if(done) break;
+      buf+=dec.decode(value,{stream:true});
+      let idx;
+      while((idx=buf.indexOf("\n\n"))>=0){
+        const block=buf.slice(0,idx);buf=buf.slice(idx+2);
+        let event="message",dataStr="";
+        for(const ln of block.split("\n")){
+          if(ln.startsWith("event:")) event=ln.slice(6).trim();
+          else if(ln.startsWith("data:")) dataStr+=ln.slice(5).trim();
+        }
+        if(event==="delta"){
+          try{const d=JSON.parse(dataStr);if(d.text){acc+=d.text;content.innerHTML=esc(acc);scrollBottom();}}catch(_){}
+        }else if(event==="error"){
+          try{const d=JSON.parse(dataStr);failed=d.message||"上游错误";}catch(_){failed=dataStr||"上游错误";}
+          finished=true;break;
+        }else if(event==="done"){
+          finished=true;break;
+        }
+      }
+    }
+    try{reader.cancel();}catch(_){}
+  }catch(e){failed=e.message;}
+  const cur=line.querySelector(".cursor");if(cur)cur.remove();
+  if(failed){
+    content.innerHTML='<span style="color:#f85149">[错误] '+esc(failed)+'</span>';
+  }else if(!acc){
+    content.innerHTML='<span style="color:#8b949e">(空回复)</span>';
+  }else{
+    state.messages=state.messages.concat([{role:"assistant",content:acc}]);
+  }
+  state.sending=false;setSending(false);setStatus("就绪");
+  $("#input").focus();
+}
+
+$("#send").addEventListener("click",sendChat);
+$("#input").addEventListener("input",autoSize);
+$("#input").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendChat();}});
+$("#input").focus();
+loadConfig();
+</script>
+</body>
+</html>

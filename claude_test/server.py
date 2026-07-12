@@ -28,6 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 from urllib import request, error
+from urllib.parse import unquote
 from xml.etree import ElementTree as ET
 
 from agents.data_testing_agent import DataTestingAgent
@@ -55,20 +56,8 @@ QUALITY_METRICS = [
 
 def default_api_config_document() -> dict[str, Any]:
     return {
-        "active": "ccswitch",
+        "active": "zhipu",
         "profiles": {
-            "ccswitch": {
-                "api_type": "anthropic",
-                "ccswitch": {
-                    "enabled": True,
-                    "config_path": "",
-                    "profile": "",
-                },
-                "model": "claude-3-5-sonnet-20241022",
-                "temperature": 0.2,
-                "max_tokens": 4096,
-                "timeout_seconds": 60,
-            },
             "anthropic": {
                 "api_type": "anthropic",
                 "base_url": "https://api.anthropic.com",
@@ -130,7 +119,7 @@ def normalize_api_config_document(raw: dict[str, Any] | None) -> dict[str, Any]:
             else:
                 profiles[name] = profile
         for name, profile in raw_profiles.items():
-            if name not in profiles and isinstance(profile, dict):
+            if name not in profiles and name != "ccswitch" and isinstance(profile, dict):
                 profiles[name] = profile
         doc["profiles"] = profiles
         if doc.get("active") not in profiles and profiles:
@@ -891,9 +880,6 @@ def load_api_config_from_document(document: dict[str, Any] | None) -> dict[str, 
     file_config = normalize_api_config_document(document)
     file_config = resolve_profile_config(file_config)
     config.update({k: v for k, v in file_config.items() if v is not None})
-    ccswitch_config = load_ccswitch_config(config)
-    if ccswitch_config:
-        config.update({k: v for k, v in ccswitch_config.items() if v is not None and v != ""})
     if config.get("request_url") and not config.get("api_url"):
         config["api_url"] = config["request_url"]
     if config.get("endpoint") and not config.get("api_url"):
@@ -908,6 +894,8 @@ def load_api_config_from_document(document: dict[str, Any] | None) -> dict[str, 
         config["api_url"] = os.environ["AI_API_URL"]
     if os.environ.get("ANTHROPIC_BASE_URL") and not os.environ.get("AI_API_URL"):
         config["api_url"] = anthropic_messages_url(os.environ["ANTHROPIC_BASE_URL"])
+        if not os.environ.get("AI_API_TYPE"):
+            config["api_type"] = "anthropic"
     if os.environ.get("AI_API_KEY"):
         config["api_key"] = os.environ["AI_API_KEY"]
     if os.environ.get("ANTHROPIC_API_KEY"):
@@ -967,94 +955,6 @@ def anthropic_messages_url(base_url: str) -> str:
     if value.endswith("/v1"):
         return value + "/messages"
     return value + "/v1/messages"
-
-
-def normalize_env_config(env: dict[str, Any]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    if env.get("ANTHROPIC_BASE_URL"):
-        result["base_url"] = env["ANTHROPIC_BASE_URL"]
-        result["api_url"] = anthropic_messages_url(str(env["ANTHROPIC_BASE_URL"]))
-        result["api_type"] = "anthropic"
-    if env.get("ANTHROPIC_API_KEY"):
-        result["api_key"] = env["ANTHROPIC_API_KEY"]
-    if env.get("ANTHROPIC_AUTH_TOKEN"):
-        result["auth_token"] = env["ANTHROPIC_AUTH_TOKEN"]
-    if env.get("ANTHROPIC_MODEL"):
-        result["model"] = env["ANTHROPIC_MODEL"]
-    if env.get("ANTHROPIC_SMALL_FAST_MODEL") and not result.get("model"):
-        result["model"] = env["ANTHROPIC_SMALL_FAST_MODEL"]
-    if env.get("OPENAI_BASE_URL"):
-        result["base_url"] = env["OPENAI_BASE_URL"]
-        result["api_url"] = str(env["OPENAI_BASE_URL"]).rstrip("/") + "/chat/completions"
-        result["api_type"] = "openai"
-    if env.get("OPENAI_API_KEY"):
-        result["api_key"] = env["OPENAI_API_KEY"]
-    if env.get("OPENAI_MODEL"):
-        result["model"] = env["OPENAI_MODEL"]
-    if env.get("API_TIMEOUT_MS"):
-        result["timeout_seconds"] = max(1, int(env["API_TIMEOUT_MS"]) // 1000)
-    return result
-
-
-def load_ccswitch_config(base_config: dict[str, Any]) -> dict[str, Any]:
-    ccswitch = base_config.get("ccswitch") if isinstance(base_config.get("ccswitch"), dict) else {}
-    if ccswitch and ccswitch.get("enabled") is False:
-        return {}
-    path_value = os.environ.get("CCSWITCH_CONFIG_PATH") or ccswitch.get("config_path") or ccswitch.get("path")
-    candidates: list[Path] = []
-    if path_value:
-        candidates.append(Path(str(path_value)).expanduser())
-    candidates.extend([
-        ROOT / "ccswitch.json",
-        ROOT / ".ccswitch.json",
-        ROOT / "ccswitch.config.json",
-        Path.home() / ".ccswitch" / "config.json",
-        Path.home() / ".claude" / "ccswitch.json",
-        Path.home() / ".claude" / "ccswitch" / "config.json",
-    ])
-    config_path = next((p for p in candidates if p.exists()), None)
-    if not config_path:
-        return {}
-    try:
-        raw = json.loads(config_path.read_text(encoding="utf-8"))
-    except Exception as exc:  # noqa: BLE001
-        raise ValueError(f"ccswitch 配置读取失败：{config_path}，{exc}") from exc
-    profile_name = os.environ.get("CCSWITCH_PROFILE") or ccswitch.get("profile") or raw.get("active") or raw.get("current") or raw.get("currentProfile")
-    selected = raw
-    profiles = raw.get("profiles") or raw.get("configs") or raw.get("providers")
-    if isinstance(profiles, dict):
-        if not profile_name and profiles:
-            profile_name = next(iter(profiles))
-        selected = profiles.get(profile_name, {})
-    elif isinstance(profiles, list):
-        if not profile_name and profiles:
-            selected = profiles[0]
-        else:
-            selected = next((item for item in profiles if item.get("name") == profile_name or item.get("id") == profile_name), {})
-    if not isinstance(selected, dict):
-        return {}
-    env = selected.get("env") if isinstance(selected.get("env"), dict) else {}
-    normalized = normalize_env_config(env)
-    direct = {
-        "api_type": selected.get("api_type") or selected.get("type") or selected.get("provider"),
-        "api_url": selected.get("api_url") or selected.get("request_url") or selected.get("endpoint"),
-        "base_url": selected.get("base_url") or selected.get("baseURL") or selected.get("url"),
-        "api_key": selected.get("api_key") or selected.get("apiKey") or selected.get("key"),
-        "auth_token": selected.get("auth_token") or selected.get("authToken") or selected.get("token"),
-        "model": selected.get("model"),
-    }
-    normalized.update({k: v for k, v in direct.items() if v})
-    if normalized.get("base_url") and not normalized.get("api_url"):
-        if str(normalized.get("api_type", "")).lower() in {"openai", "chat_completions", "openai-compatible", "zhipu"}:
-            normalized["api_url"] = str(normalized["base_url"]).rstrip("/") + "/chat/completions"
-        else:
-            normalized["api_url"] = anthropic_messages_url(str(normalized["base_url"]))
-            normalized["api_type"] = normalized.get("api_type") or "anthropic"
-    if normalized:
-        normalized["source"] = f"ccswitch:{config_path}"
-        if profile_name:
-            normalized["profile"] = profile_name
-    return normalized
 
 
 def public_api_config() -> dict[str, Any]:
@@ -1165,16 +1065,13 @@ def call_anthropic_messages_api(config: dict[str, Any], prompt: str, analysis: d
 
 def call_openai_compatible_text_api(
     config: dict[str, Any],
-    prompt: str,
-    user_text: str,
+    system_prompt: str,
+    messages: list[dict[str, Any]],
     max_output_tokens: int | None = None,
 ) -> tuple[str | None, str | None]:
     payload = {
         "model": config["model"],
-        "messages": [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": user_text},
-        ],
+        "messages": ([{"role": "system", "content": system_prompt}] if system_prompt else []) + messages,
         "temperature": config["temperature"],
     }
     if max_output_tokens:
@@ -1204,19 +1101,18 @@ def call_openai_compatible_text_api(
 
 def call_anthropic_messages_text_api(
     config: dict[str, Any],
-    prompt: str,
-    user_text: str,
+    system_prompt: str,
+    messages: list[dict[str, Any]],
     max_output_tokens: int | None = None,
 ) -> tuple[str | None, str | None]:
     payload = {
         "model": config["model"],
         "max_tokens": max_output_tokens or config["max_tokens"],
         "temperature": config["temperature"],
-        "system": prompt,
-        "messages": [
-            {"role": "user", "content": user_text},
-        ],
+        "messages": messages,
     }
+    if system_prompt:
+        payload["system"] = system_prompt
     headers = {
         "Content-Type": "application/json",
         "anthropic-version": config["anthropic_version"],
@@ -1249,17 +1145,125 @@ def call_anthropic_messages_text_api(
     return json.dumps(data, ensure_ascii=False, indent=2), None
 
 
-def call_ai_connection_test(document: dict[str, Any] | None, question: str) -> tuple[str | None, str | None, dict[str, Any]]:
+def normalize_chat_messages(messages: list[dict[str, Any]] | None) -> list[dict[str, str]]:
+    """规范化对话消息:仅保留 user/assistant、过滤空内容、合并相邻同角色、丢弃开头 assistant。"""
+    cleaned: list[dict[str, str]] = []
+    for item in messages or []:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = clean_value(item.get("content"))
+        if role in {"user", "assistant"} and content:
+            cleaned.append({"role": role, "content": content})
+    merged: list[dict[str, str]] = []
+    for msg in cleaned:
+        if merged and merged[-1]["role"] == msg["role"]:
+            merged[-1]["content"] += "\n" + msg["content"]
+        else:
+            merged.append({"role": msg["role"], "content": msg["content"]})
+    while merged and merged[0]["role"] == "assistant":
+        merged.pop(0)
+    return merged
+
+
+def call_ai_connection_test(
+    document: dict[str, Any] | None,
+    messages: list[dict[str, Any]],
+    system_prompt: str | None = None,
+) -> tuple[str | None, str | None, dict[str, Any]]:
     config = load_api_config_from_document(document)
     if not config["api_url"]:
         return None, "api_config.json 未配置 api_url", config
-    prompt = "你是接口连通性测试助手。请用简短中文直接回答，不要展开分析。"
-    user_text = clean_value(question) or "请简短回复：接口连通性正常。"
+    merged = normalize_chat_messages(messages)
+    if not merged:
+        return None, "没有可发送的消息", config
+    system = clean_value(system_prompt) or "你是一个乐于助人的中文助手，请用中文回答。"
     if config["api_type"] in {"openai", "chat_completions", "openai-compatible", "zhipu"}:
-        reply, err = call_openai_compatible_text_api(config, prompt, user_text, max_output_tokens=128)
+        reply, err = call_openai_compatible_text_api(config, system, merged)
     else:
-        reply, err = call_anthropic_messages_text_api(config, prompt, user_text, max_output_tokens=128)
+        reply, err = call_anthropic_messages_text_api(config, system, merged)
     return reply, err, config
+
+
+def stream_anthropic_messages(config: dict[str, Any], system_prompt: str, messages: list[dict[str, str]]):
+    payload = {
+        "model": config["model"],
+        "max_tokens": config["max_tokens"],
+        "temperature": config["temperature"],
+        "messages": messages,
+        "stream": True,
+    }
+    if system_prompt:
+        payload["system"] = system_prompt
+    headers = {"Content-Type": "application/json", "anthropic-version": config["anthropic_version"]}
+    if config["api_key"]:
+        headers["x-api-key"] = config["api_key"]
+    if config["auth_token"]:
+        headers["Authorization"] = f"Bearer {config['auth_token']}"
+    req = request.Request(config["api_url"], data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers=headers, method="POST")
+    with request.urlopen(req, timeout=config["timeout_seconds"]) as resp:
+        for raw in resp:
+            line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+            if not line.startswith("data:"):
+                continue
+            try:
+                chunk = json.loads(line[5:].strip())
+            except json.JSONDecodeError:
+                continue
+            ctype = chunk.get("type")
+            if ctype == "content_block_delta":
+                delta = chunk.get("delta") or {}
+                if delta.get("type") == "text_delta" and delta.get("text"):
+                    yield delta["text"]
+            elif ctype == "message_stop":
+                return
+            elif ctype == "error":
+                raise RuntimeError((chunk.get("error") or {}).get("message") or "上游返回错误")
+
+
+def stream_openai_compatible(config: dict[str, Any], system_prompt: str, messages: list[dict[str, str]]):
+    payload = {
+        "model": config["model"],
+        "messages": ([{"role": "system", "content": system_prompt}] if system_prompt else []) + messages,
+        "temperature": config["temperature"],
+        "stream": True,
+    }
+    headers = {"Content-Type": "application/json"}
+    if config["api_key"]:
+        headers["Authorization"] = f"Bearer {config['api_key']}"
+    req = request.Request(config["api_url"], data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers=headers, method="POST")
+    with request.urlopen(req, timeout=config["timeout_seconds"]) as resp:
+        for raw in resp:
+            line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+            if not line.startswith("data:"):
+                continue
+            data_str = line[5:].strip()
+            if data_str == "[DONE]":
+                return
+            try:
+                chunk = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
+            choices = chunk.get("choices") if isinstance(chunk, dict) else None
+            if choices and isinstance(choices, list) and choices[0]:
+                delta = choices[0].get("delta") or {}
+                text = delta.get("content")
+                if text:
+                    yield text
+
+
+def stream_chat(document: dict[str, Any] | None, messages: list[dict[str, Any]], system_prompt: str | None = None):
+    config = load_api_config_from_document(document)
+    if not config["api_url"]:
+        raise RuntimeError("api_config.json 未配置 api_url")
+    merged = normalize_chat_messages(messages)
+    if not merged:
+        raise RuntimeError("没有可发送的消息")
+    system = clean_value(system_prompt) or "你是一个乐于助人的中文助手，请用中文回答。"
+    if config["api_type"] in {"openai", "chat_completions", "openai-compatible", "zhipu"}:
+        yield from stream_openai_compatible(config, system, merged)
+    else:
+        yield from stream_anthropic_messages(config, system, merged)
 
 
 def post_json(url: str, payload: dict[str, Any], headers: dict[str, str], timeout: int, custom_headers: dict[str, Any] | None = None) -> tuple[str, str | None]:
@@ -1337,7 +1341,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.rfile.read(length)
 
     def do_GET(self) -> None:  # noqa: N802
-        path = self.path.split("?", 1)[0]
+        path = unquote(self.path.split("?", 1)[0])
         if path == "/api/config":
             self.send_json({"ok": True, **api_config_payload()})
             return
@@ -1356,6 +1360,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/api/chat/stream":
+            self.handle_chat_stream()
+            return
         try:
             if self.path == "/api/upload":
                 self.handle_upload()
@@ -1421,8 +1428,13 @@ class Handler(BaseHTTPRequestHandler):
         if document is not None and not isinstance(document, dict):
             self.send_error_json("document 必须是对象")
             return
-        question = clean_value(payload.get("question"))
-        reply, err, config = call_ai_connection_test(document, question)
+        messages = payload.get("messages")
+        if not isinstance(messages, list):
+            # 兼容旧版单次 question
+            question = clean_value(payload.get("question"))
+            messages = [{"role": "user", "content": question}] if question else []
+        system = clean_value(payload.get("system")) or None
+        reply, err, config = call_ai_connection_test(document, messages, system)
         if err:
             self.send_error_json(err, 400)
             return
@@ -1440,6 +1452,39 @@ class Handler(BaseHTTPRequestHandler):
                 },
             }
         )
+
+    def handle_chat_stream(self) -> None:
+        try:
+            payload = self.json_payload()
+        except Exception as exc:  # noqa: BLE001
+            self.send_error_json(f"请求解析失败：{exc}")
+            return
+        document = payload.get("document")
+        if document is not None and not isinstance(document, dict):
+            self.send_error_json("document 必须是对象")
+            return
+        messages = payload.get("messages")
+        if not isinstance(messages, list):
+            question = clean_value(payload.get("question"))
+            messages = [{"role": "user", "content": question}] if question else []
+        system = clean_value(payload.get("system")) or None
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        def sse(event: str, data: dict[str, Any]) -> None:
+            self.wfile.write(f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+        try:
+            for delta in stream_chat(document, messages, system):
+                sse("delta", {"text": delta})
+            sse("done", {})
+        except Exception as exc:  # noqa: BLE001
+            sse("error", {"message": str(exc)})
 
 
 def main() -> None:

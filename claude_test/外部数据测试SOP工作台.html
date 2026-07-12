@@ -92,37 +92,6 @@ function renderStatus(){
   }
   el.className="status warn";el.textContent="等待后端配置";
 }
-function getActiveProfileName(){
-  return state.apiDocument?.active || "ccswitch";
-}
-function getProfileDocument(){
-  const doc=state.apiDocument||{};
-  const profiles=doc.profiles||{};
-  const active=getActiveProfileName();
-  return profiles[active]||{};
-}
-function collectConfigDocument(){
-  const doc=state.apiDocument||{active:"ccswitch",profiles:{}};
-  const active=$("#cfg-active")?.value||doc.active||"ccswitch";
-  const profiles=JSON.parse(JSON.stringify(doc.profiles||{}));
-  if(!profiles[active]) profiles[active]={};
-  const profile=profiles[active];
-  profile.api_type=$("#cfg-api-type")?.value||profile.api_type||"anthropic";
-  profile.api_url=$("#cfg-api-url")?.value||profile.api_url||"";
-  profile.request_url=profile.api_url;
-  profile.base_url=$("#cfg-base-url")?.value||profile.base_url||"";
-  profile.api_key=$("#cfg-api-key")?.value||profile.api_key||"";
-  profile.auth_token=$("#cfg-auth-token")?.value||profile.auth_token||"";
-  profile.model=$("#cfg-model")?.value||profile.model||"";
-  profile.timeout_seconds=Number($("#cfg-timeout")?.value||profile.timeout_seconds||60);
-  profile.temperature=Number($("#cfg-temperature")?.value||profile.temperature||0.2);
-  profile.max_tokens=Number($("#cfg-max-tokens")?.value||profile.max_tokens||4096);
-  const ccswitchPath=$("#cfg-ccswitch-path")?.value||profile.ccswitch?.config_path||"";
-  const ccswitchProfile=$("#cfg-ccswitch-profile")?.value||profile.ccswitch?.profile||"";
-  profile.ccswitch={enabled:profile.api_type==="ccswitch",config_path:ccswitchPath,profile:ccswitchProfile};
-  profiles[active]=profile;
-  return {active,profiles};
-}
 async function api(path,options={}){
   const resp=await fetch(path,options);
   const data=await resp.json().catch(()=>({ok:false,error:"后端返回非 JSON 响应"}));
@@ -135,7 +104,6 @@ function render(){
   $$(".nav-item").forEach(item=>item.classList.toggle("active",item.dataset.view===state.view));
   const c=$("#content");
   c.innerHTML=state.view==="upload"?renderUpload():state.view==="analyze"?renderAnalyze():renderReportView();
-  bindConfigEvents();
   if(state.view==="upload") afterUpload();
   if(state.view==="analyze") afterAnalyze();
   if(state.view==="report") afterReport();
@@ -169,88 +137,10 @@ function renderApiConfig(){
   return `<div class="card">
     <div class="card-h"><h3>API 配置</h3><span class="tag">${esc((state.apiConfig||{}).source||"")}</span></div>
     <div class="toolbar" style="margin:0">
-      <button class="btn primary" type="button" onclick="window.location.href='api_settings.html'">打开设置</button>
+      <button class="btn primary" type="button" onclick="window.location.href='chat.html'">AI 交互</button>
+      <button class="btn" type="button" onclick="window.location.href='api_settings.html'">打开设置</button>
       <span class="note" style="margin:0">请求地址、API Key、模型与连通性测试已拆到独立页面。</span>
     </div>
-  </div>`;
-  const c=state.apiConfig||{};
-  const doc=state.apiDocument||{active:"ccswitch",profiles:{}};
-  const profiles=doc.profiles||{};
-  const defaults=["ccswitch","anthropic","openai_compatible","zhipu"];
-  const profileNames=Array.from(new Set([...defaults,...Object.keys(profiles)]));
-  const active=profiles[doc.active]?doc.active:(profileNames[0]||"ccswitch");
-  const profile=profiles[active]||{};
-  const apiType=profile.api_type||c.api_type||"anthropic";
-  const apiUrl=profile.api_url||profile.request_url||c.api_url||"";
-  const baseUrl=profile.base_url||c.base_url||"";
-  const apiKey=profile.api_key||c.api_key||"";
-  const authToken=profile.auth_token||c.auth_token||"";
-  const model=profile.model||c.model||"";
-  const timeoutSeconds=profile.timeout_seconds??c.timeout_seconds??60;
-  const temperature=profile.temperature??c.temperature??0.2;
-  const maxTokens=profile.max_tokens??c.max_tokens??4096;
-  const ccswitch=profile.ccswitch||{};
-  return `<div class="card">
-    <div class="card-h"><h3>API 配置</h3><span class="tag">${esc(c.source||"")}</span></div>
-    <div class="grid g2">
-      <div>
-        <label>当前 Profile</label>
-        <select id="cfg-active" class="select">
-          ${profileNames.map(name=>`<option value="${esc(name)}" ${name===active?"selected":""}>${esc(name)}</option>`).join("")}
-        </select>
-      </div>
-      <div>
-        <label>API 类型</label>
-        <select id="cfg-api-type" class="select">
-          ${["anthropic","openai","ccswitch","zhipu"].map(v=>`<option value="${esc(v)}" ${v===apiType?"selected":""}>${esc(v)}</option>`).join("")}
-        </select>
-      </div>
-      <div>
-        <label>请求地址</label>
-        <input id="cfg-api-url" class="input" value="${esc(apiUrl)}" placeholder="https://.../v1/messages">
-      </div>
-      <div>
-        <label>Base URL</label>
-        <input id="cfg-base-url" class="input" value="${esc(baseUrl)}" placeholder="https://api.anthropic.com">
-      </div>
-      <div>
-        <label>API Key</label>
-        <input id="cfg-api-key" class="input" value="${esc(apiKey)}" placeholder="sk-...">
-      </div>
-      <div>
-        <label>Auth Token</label>
-        <input id="cfg-auth-token" class="input" value="${esc(authToken)}" placeholder="Bearer token">
-      </div>
-      <div>
-        <label>模型</label>
-        <input id="cfg-model" class="input" value="${esc(model)}" placeholder="claude-3-5-sonnet-20241022">
-      </div>
-      <div>
-        <label>超时(秒)</label>
-        <input id="cfg-timeout" class="input" type="number" min="1" value="${esc(timeoutSeconds)}">
-      </div>
-      <div>
-        <label>Temperature</label>
-        <input id="cfg-temperature" class="input" type="number" min="0" max="2" step="0.1" value="${esc(temperature)}">
-      </div>
-      <div>
-        <label>Max tokens</label>
-        <input id="cfg-max-tokens" class="input" type="number" min="1" value="${esc(maxTokens)}">
-      </div>
-      <div>
-        <label>ccswitch 配置路径</label>
-        <input id="cfg-ccswitch-path" class="input" value="${esc(ccswitch.config_path||"")}" placeholder="E:/.../ccswitch.json">
-      </div>
-      <div>
-        <label>ccswitch Profile</label>
-        <input id="cfg-ccswitch-profile" class="input" value="${esc(ccswitch.profile||"")}" placeholder="profile name">
-      </div>
-    </div>
-    <div class="toolbar" style="margin-top:16px">
-      <button class="btn primary" id="save-config-btn">${state.savingConfig?'<span class="spinner"></span> 保存中':'保存配置'}</button>
-      <button class="btn" id="refresh-config-btn">刷新配置</button>
-    </div>
-    <div class="note">保存后会写回后端 api_config.json，并立即影响报告生成时调用的模型与地址。</div>
   </div>`;
 }
 
@@ -440,32 +330,6 @@ async function loadConfig(){
     state.error=`后端配置读取失败：${err.message}`;
   }
   render();
-}
-
-function bindConfigEvents(){
-  $("#save-config-btn")?.addEventListener("click",saveConfig);
-  $("#refresh-config-btn")?.addEventListener("click",loadConfig);
-  $("#cfg-active")?.addEventListener("change",()=>{
-    state.apiDocument.active=$("#cfg-active").value;
-    render();
-  });
-}
-
-async function saveConfig(){
-  state.error="";
-  state.savingConfig=true;
-  render();
-  try{
-    const document=collectConfigDocument();
-    const data=await api("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({document})});
-    state.apiDocument=data.document||document;
-    state.apiConfig=data.config||state.apiConfig;
-  }catch(err){
-    state.error=`配置保存失败：${err.message}`;
-  }finally{
-    state.savingConfig=false;
-    render();
-  }
 }
 
 render();

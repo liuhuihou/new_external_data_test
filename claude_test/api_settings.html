@@ -33,14 +33,62 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
 .btn:hover{background:var(--surface-2)}
 .btn.primary{background:var(--brand);border-color:transparent;color:#fff}
 .btn.primary:hover{background:var(--brand-ink)}
+.btn.mini{padding:6px 10px;font-size:12px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .note{font-size:12px;color:var(--muted);background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 18%,transparent);border-radius:8px;padding:10px 12px}
 .error{background:#fbebeb;border-color:#f0c4c4;color:var(--crit)}
-.result{white-space:pre-wrap;word-break:break-word;font-size:13px;background:#fafafa;border:1px solid var(--line);border-radius:8px;padding:14px}
 .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--line);background:#fff;color:var(--muted)}
 .muted{color:var(--muted)}
 .spinner{width:14px;height:14px;border:2px solid #d8d8d8;border-top-color:var(--brand);border-radius:50%;display:inline-block;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* 双栏布局 */
+.config-layout{display:flex;gap:16px;align-items:flex-start}
+.profile-rail{width:248px;flex:none;display:flex;flex-direction:column;gap:10px}
+.editor-pane{flex:1;min-width:0}
+.rail-h{display:flex;justify-content:space-between;align-items:center}
+.rail-h .label{font-size:13px;font-weight:750}
+.profile-card{position:relative;border:1px solid var(--line);border-radius:10px;background:#fff;padding:12px 14px;cursor:pointer;transition:background .12s,border-color .12s}
+.profile-card:hover{background:var(--surface-2)}
+.profile-card.editing{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.profile-card.active{border-color:var(--brand-ink)}
+.pc-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pc-name{font-weight:750;font-size:14px;display:flex;align-items:center;gap:6px;word-break:break-all}
+.pc-star{color:var(--warn)}
+.pc-model{font-size:12px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:#fff;text-transform:lowercase;flex:none}
+.pc-actions{display:none;position:absolute;top:6px;right:6px;gap:4px}
+.profile-card:hover .pc-actions,.profile-card.editing .pc-actions{display:inline-flex}
+.pc-actions button{border:1px solid var(--line);background:#fff;border-radius:6px;width:24px;height:24px;font-size:12px;cursor:pointer;line-height:1;padding:0}
+.pc-actions button:hover{background:var(--surface-2);border-color:var(--brand)}
+.editor-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.editor-head .title2{font-size:16px;font-weight:750;display:flex;align-items:center;gap:8px}
+.badge.active-badge{background:var(--brand-soft);color:var(--brand-ink);border-color:color-mix(in srgb,var(--brand) 25%,transparent)}
+.key-wrap{position:relative}
+.key-wrap .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:transparent;cursor:pointer;font-size:14px;color:var(--muted);padding:4px;line-height:1}
+.dirty-dot{color:var(--warn);font-weight:700}
+
+/* 对话区 */
+.chat-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.chat-head .title2{font-size:16px;font-weight:750}
+.chat-tools{display:flex;gap:8px}
+.sys-box{margin-bottom:12px}
+.chat-log{display:flex;flex-direction:column;gap:10px;max-height:380px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:14px;background:#fafafa;margin-bottom:12px;min-height:180px}
+.chat-empty{text-align:center;font-size:12px;color:var(--muted);align-self:center;margin:auto;line-height:1.8}
+.msg{max-width:80%;padding:9px 12px;border-radius:12px;font-size:13px;white-space:pre-wrap;word-break:break-word;line-height:1.55}
+.msg.user{align-self:flex-end;background:var(--brand);color:#fff;border-bottom-right-radius:3px}
+.msg.assistant{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:3px}
+.msg.error{background:#fbebeb;border-color:#f0c4c4;color:var(--crit)}
+.msg-pending{align-self:flex-start;background:#fff;border:1px solid var(--line);border-radius:12px;border-bottom-left-radius:3px;padding:9px 12px;font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:8px}
+.chat-input-row{display:flex;gap:10px;align-items:flex-end}
+.chat-input-row .textarea{min-height:60px;flex:1}
+.chat-input-row .btn{flex:none}
+@media(max-width:980px){
+  .config-layout{flex-direction:column}
+  .profile-rail{width:100%;flex-direction:row;overflow-x:auto;padding-bottom:6px}
+  .rail-h{width:100%}
+  .profile-card{min-width:190px;flex:none}
+}
 </style>
 </head>
 <body>
@@ -48,7 +96,7 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
   <div class="topbar">
     <div>
       <h1 class="title">API 设置</h1>
-      <div class="sub">请求地址、API Key、模型、ccswitch 与连通性测试</div>
+      <div class="sub">Profile 管理 · 请求地址、API Key、模型与对话测试</div>
     </div>
     <div class="toolbar" style="margin:0">
       <button class="btn" type="button" onclick="window.location.href='外部数据测试SOP工作台.html'">返回工作台</button>
@@ -58,79 +106,91 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
 
   <div id="error"></div>
 
-  <div class="card">
-    <div class="grid g2">
-      <div>
-        <label>Active Profile</label>
-        <select id="active" class="select"></select>
+  <div class="config-layout">
+    <aside class="profile-rail">
+      <div class="rail-h">
+        <span class="label">Profiles</span>
+        <button class="btn mini" id="add_btn" type="button">+ 新增</button>
       </div>
-      <div>
-        <label>API 类型</label>
-        <select id="api_type" class="select">
-          <option value="anthropic">anthropic</option>
-          <option value="openai">openai</option>
-          <option value="ccswitch">ccswitch</option>
-          <option value="zhipu">zhipu</option>
-        </select>
-      </div>
-      <div>
-        <label>请求地址</label>
-        <input id="api_url" class="input" placeholder="https://.../v1/chat/completions">
-      </div>
-      <div>
-        <label>Base URL</label>
-        <input id="base_url" class="input" placeholder="https://open.bigmodel.cn/api/paas/v4">
-      </div>
-      <div>
-        <label>API Key</label>
-        <input id="api_key" class="input" placeholder="your api key">
-      </div>
-      <div>
-        <label>Auth Token</label>
-        <input id="auth_token" class="input" placeholder="Bearer token">
-      </div>
-      <div>
-        <label>模型</label>
-        <input id="model" class="input" placeholder="glm-5.2">
-      </div>
-      <div>
-        <label>超时(秒)</label>
-        <input id="timeout_seconds" class="input" type="number" min="1" value="60">
-      </div>
-      <div>
-        <label>Temperature</label>
-        <input id="temperature" class="input" type="number" min="0" max="2" step="0.1" value="0.2">
-      </div>
-      <div>
-        <label>Max tokens</label>
-        <input id="max_tokens" class="input" type="number" min="1" value="4096">
-      </div>
-      <div>
-        <label>ccswitch 配置路径</label>
-        <input id="ccswitch_path" class="input" placeholder="E:/.../ccswitch.json">
-      </div>
-      <div>
-        <label>ccswitch Profile</label>
-        <input id="ccswitch_profile" class="input" placeholder="profile name">
-      </div>
-    </div>
-    <div class="toolbar">
-      <button id="save_btn" class="btn primary" type="button">保存配置</button>
-      <button id="reload_btn" class="btn" type="button">刷新</button>
-      <button id="test_btn" class="btn" type="button">连通性测试</button>
-    </div>
-    <div class="note">测试不会写入配置文件，只会使用当前表单内容调用后端接口。</div>
-  </div>
+      <div id="profile_list"></div>
+    </aside>
 
-  <div class="card">
-    <div class="grid g2">
-      <div>
-        <label>提问窗口</label>
-        <textarea id="question" class="textarea" placeholder="请输入用于测试接口连通性的简短问题">接口是否可用？</textarea>
+    <div class="editor-pane">
+      <div class="card">
+        <div class="editor-head">
+          <div class="title2">编辑:<span id="editing_name">zhipu</span><span id="editing_active_tag" class="badge active-badge" style="display:none">★ 当前生效</span></div>
+          <button class="btn mini" id="activate_btn" type="button" style="display:none">设为当前生效</button>
+        </div>
+        <div class="grid g2">
+          <div>
+            <label>API 类型</label>
+            <select id="api_type" class="select">
+              <option value="anthropic">anthropic</option>
+              <option value="openai">openai</option>
+              <option value="openai-compatible">openai-compatible</option>
+              <option value="zhipu">zhipu</option>
+            </select>
+          </div>
+          <div>
+            <label>模型</label>
+            <input id="model" class="input" placeholder="glm-5.2">
+          </div>
+          <div>
+            <label>请求地址</label>
+            <input id="api_url" class="input" placeholder="https://.../chat/completions">
+          </div>
+          <div>
+            <label>Base URL</label>
+            <input id="base_url" class="input" placeholder="https://open.bigmodel.cn/api/paas/v4">
+          </div>
+          <div>
+            <label>API Key</label>
+            <div class="key-wrap">
+              <input id="api_key" class="input" type="password" placeholder="your api key" style="padding-right:34px">
+              <button type="button" id="key_eye" class="eye" title="显示/隐藏">👁</button>
+            </div>
+          </div>
+          <div>
+            <label>Auth Token</label>
+            <input id="auth_token" class="input" placeholder="Bearer token">
+          </div>
+          <div>
+            <label>超时(秒)</label>
+            <input id="timeout_seconds" class="input" type="number" min="1" value="60">
+          </div>
+          <div>
+            <label>Temperature</label>
+            <input id="temperature" class="input" type="number" min="0" max="2" step="0.1" value="0.2">
+          </div>
+          <div>
+            <label>Max tokens</label>
+            <input id="max_tokens" class="input" type="number" min="1" value="4096">
+          </div>
+        </div>
+        <div class="toolbar">
+          <button id="save_btn" class="btn primary" type="button">保存配置</button>
+          <button id="reload_btn" class="btn" type="button">刷新</button>
+        </div>
+        <div class="note">配置按 profile 保存到 <code>api_config.json</code>;下方对话测试使用当前表单内容,不会写盘。内置 profile(anthropic / openai_compatible / zhipu)不可删除或重命名。</div>
       </div>
-      <div>
-        <label>测试结果</label>
-        <div id="result" class="result muted">暂无结果</div>
+
+      <div class="card">
+        <div class="chat-head">
+          <div class="title2">对话测试</div>
+          <div class="chat-tools">
+            <button class="btn mini" id="sys_toggle" type="button">系统提示词</button>
+            <button class="btn mini" id="chat_clear" type="button">清空</button>
+          </div>
+        </div>
+        <div id="sys_box" class="sys-box" style="display:none">
+          <input id="system_prompt" class="input" placeholder="系统提示词(可选),留空使用默认助手">
+        </div>
+        <div id="chat_log" class="chat-log"></div>
+        <div class="chat-input-row">
+          <textarea id="chat_input" class="textarea" placeholder="输入消息,Enter 发送 / Shift+Enter 换行"></textarea>
+          <button class="btn primary" id="chat_send" type="button">发送</button>
+        </div>
+        <div class="note" style="margin-top:12px">每次发送使用当前编辑的 API 配置(未保存也生效);对话历史会作为上下文一并发送,模型可据此连续对话。</div>
       </div>
     </div>
   </div>
@@ -138,7 +198,8 @@ label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
 
 <script>
 const $=(s,p=document)=>p.querySelector(s);
-const state={document:null,loading:false,saving:false,testing:false,error:""};
+const BUILTIN=["anthropic","openai_compatible","zhipu"];
+const state={document:null,editing:"zhipu",active:"zhipu",dirty:false,showKey:false,loading:false,saving:false,chatSending:false,chat:[],error:""};
 
 function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
 
@@ -149,97 +210,212 @@ async function api(path,options={}){
   return data;
 }
 
+function isBuiltin(name){return BUILTIN.includes(name);}
+
+function profileNames(){
+  const profiles=state.document?.profiles||{};
+  return Array.from(new Set([...BUILTIN,...Object.keys(profiles)])).filter(n=>n!=="ccswitch");
+}
+
+function refreshButtons(){
+  const busy=state.loading||state.saving;
+  ["save_btn","reload_btn","add_btn"].forEach(id=>{const el=$("#"+id);if(el)el.disabled=busy;});
+  const send=$("#chat_send");if(send) send.disabled=busy||state.chatSending;
+}
+
 function setBusy(flag,kind){
   if(kind==="save") state.saving=flag;
-  if(kind==="test") state.testing=flag;
-  $("#save_btn").disabled=state.saving||state.testing;
-  $("#test_btn").disabled=state.saving||state.testing;
-  $("#reload_btn").disabled=state.saving||state.testing;
-  $("#status").innerHTML=(state.saving||state.testing)?'<span class="spinner"></span> 处理中':'就绪';
+  else state.loading=flag;
+  refreshButtons();
+  renderStatus();
 }
 
 function showError(message){
   $("#error").innerHTML=message?`<div class="card error">${esc(message)}</div>`:"";
 }
 
-function profileNames(doc){
-  const defaults=["ccswitch","anthropic","openai_compatible","zhipu"];
-  const profiles=doc?.profiles||{};
-  return Array.from(new Set([...defaults,...Object.keys(profiles)]));
+function renderStatus(){
+  if(state.chatSending){$("#status").innerHTML='<span class="spinner"></span> 对话中';return;}
+  let txt=`生效: ${state.active||"-"}`;
+  if(state.dirty) txt+='  <span class="dirty-dot">● 未保存</span>';
+  $("#status").innerHTML=txt;
 }
 
-function currentActive(){
-  return $("#active").value || state.document?.active || "ccswitch";
+function renderRail(){
+  const names=profileNames();
+  const profiles=state.document?.profiles||{};
+  $("#profile_list").innerHTML=names.map(name=>{
+    const p=profiles[name]||{};
+    const editing=name===state.editing;
+    const active=name===state.active;
+    const model=p.model||"(未设置模型)";
+    const type=p.api_type||"-";
+    const actions=isBuiltin(name)?"":`<span class="pc-actions">
+      <button type="button" title="重命名" data-act="rename" data-name="${esc(name)}">✏</button>
+      <button type="button" title="删除" data-act="delete" data-name="${esc(name)}">🗑</button>
+    </span>`;
+    return `<div class="profile-card${editing?" editing":""}${active?" active":""}" data-name="${esc(name)}">
+      ${actions}
+      <div class="pc-row">
+        <span class="pc-name">${active?'<span class="pc-star">★</span>':''}${esc(name)}</span>
+        <span class="pc-badge">${esc(type)}</span>
+      </div>
+      <div class="pc-model">${esc(model)}</div>
+    </div>`;
+  }).join("");
 }
 
-function currentProfile(){
-  const doc=state.document||{active:"ccswitch",profiles:{}};
-  const active=currentActive();
-  const profiles=doc.profiles||{};
-  if(!profiles[active]) profiles[active]={};
-  return profiles[active];
+function renderEditorHead(){
+  $("#editing_name").textContent=state.editing||"-";
+  const isActive=state.editing===state.active;
+  $("#editing_active_tag").style.display=isActive?"":"none";
+  $("#activate_btn").style.display=isActive?"none":"";
+}
+
+function renderChat(){
+  const log=$("#chat_log");
+  if(!state.chat.length&&!state.chatSending){
+    log.innerHTML='<div class="chat-empty">输入消息开始对话(Enter 发送 / Shift+Enter 换行)。<br>每次发送使用当前编辑的 API 配置。</div>';
+    return;
+  }
+  let html=state.chat.map(m=>{
+    const cls=m.role==="user"?"user":(m.error?"assistant error":"assistant");
+    return `<div class="msg ${cls}">${esc(m.content)}</div>`;
+  }).join("");
+  if(state.chatSending) html+='<div class="msg-pending"><span class="spinner"></span> 正在回复...</div>';
+  log.innerHTML=html;
+  log.scrollTop=log.scrollHeight;
+}
+
+function render(){
+  renderRail();
+  renderEditorHead();
+  renderStatus();
+  renderChat();
+}
+
+function loadProfileToForm(name){
+  const p=(state.document?.profiles||{})[name]||{};
+  $("#api_type").value=p.api_type||"openai";
+  $("#api_url").value=p.api_url||p.request_url||"";
+  $("#base_url").value=p.base_url||"";
+  $("#api_key").value=p.api_key||"";
+  $("#auth_token").value=p.auth_token||"";
+  $("#model").value=p.model||"";
+  $("#timeout_seconds").value=p.timeout_seconds??60;
+  $("#temperature").value=p.temperature??0.2;
+  $("#max_tokens").value=p.max_tokens??4096;
+  showError("");
+}
+
+function persistDraft(){
+  if(!state.document) return;
+  const profiles=state.document.profiles||(state.document.profiles={});
+  if(!profiles[state.editing]) profiles[state.editing]={};
+  const p=profiles[state.editing];
+  p.api_type=$("#api_type").value;
+  p.api_url=$("#api_url").value.trim();
+  p.request_url=p.api_url;
+  p.base_url=$("#base_url").value.trim();
+  p.api_key=$("#api_key").value;
+  p.auth_token=$("#auth_token").value.trim();
+  p.model=$("#model").value.trim();
+  p.timeout_seconds=Number($("#timeout_seconds").value||60);
+  p.temperature=Number($("#temperature").value||0.2);
+  p.max_tokens=Number($("#max_tokens").value||4096);
+}
+
+function selectProfile(name){
+  if(!state.document||!name||name===state.editing) return;
+  persistDraft();
+  state.editing=name;
+  loadProfileToForm(name);
+  render();
+}
+
+function setActive(name){
+  if(!state.document||!name||name===state.active) return;
+  persistDraft();
+  state.active=name;
+  state.dirty=true;
+  render();
+}
+
+function nameTaken(name){
+  const profiles=state.document?.profiles||{};
+  return name==="ccswitch"||BUILTIN.includes(name)||Object.prototype.hasOwnProperty.call(profiles,name);
+}
+
+function addProfile(){
+  const name=(prompt("新 Profile 名称:")||"").trim();
+  if(!name) return;
+  if(nameTaken(name)){alert(`名称「${name}」不可用或已存在`);return;}
+  persistDraft();
+  const profiles=state.document.profiles||(state.document.profiles={});
+  profiles[name]={api_type:"openai",api_url:"",base_url:"",api_key:"",auth_token:"",model:"",timeout_seconds:60,temperature:0.2,max_tokens:4096};
+  state.editing=name;
+  loadProfileToForm(name);
+  state.dirty=true;
+  render();
+}
+
+function renameProfile(old){
+  const name=(prompt(`将「${old}」重命名为:`,old)||"").trim();
+  if(!name||name===old) return;
+  const profiles=state.document.profiles||{};
+  const others={...profiles};delete others[old];
+  const taken=name==="ccswitch"||BUILTIN.includes(name)||Object.prototype.hasOwnProperty.call(others,name);
+  if(taken){alert(`名称「${name}」不可用或已存在`);return;}
+  persistDraft();
+  const content=profiles[old]||{};
+  const ordered={};
+  for(const k of Object.keys(profiles)){ordered[k===old?name:k]=k===old?content:profiles[k];}
+  state.document.profiles=ordered;
+  if(state.editing===old) state.editing=name;
+  if(state.active===old) state.active=name;
+  state.dirty=true;
+  render();
+}
+
+function deleteProfile(name){
+  if(isBuiltin(name)) return;
+  if(!confirm(`确认删除 Profile「${name}」?该操作需保存后生效。`)) return;
+  persistDraft();
+  const profiles=state.document.profiles||{};
+  delete profiles[name];
+  const fallback=profileNames()[0]||"zhipu";
+  if(state.active===name) state.active=fallback;
+  if(state.editing===name){state.editing=fallback;loadProfileToForm(fallback);}
+  state.dirty=true;
+  render();
 }
 
 function collectDocument(){
-  const doc=state.document||{active:"ccswitch",profiles:{}};
-  const profiles=JSON.parse(JSON.stringify(doc.profiles||{}));
-  const active=currentActive();
-  if(!profiles[active]) profiles[active]={};
-  const profile=profiles[active];
-  profile.api_type=$("#api_type").value;
-  profile.api_url=$("#api_url").value.trim();
-  profile.request_url=profile.api_url;
-  profile.base_url=$("#base_url").value.trim();
-  profile.api_key=$("#api_key").value.trim();
-  profile.auth_token=$("#auth_token").value.trim();
-  profile.model=$("#model").value.trim();
-  profile.timeout_seconds=Number($("#timeout_seconds").value||60);
-  profile.temperature=Number($("#temperature").value||0.2);
-  profile.max_tokens=Number($("#max_tokens").value||4096);
-  profile.ccswitch={
-    enabled:profile.api_type==="ccswitch",
-    config_path:$("#ccswitch_path").value.trim(),
-    profile:$("#ccswitch_profile").value.trim(),
-  };
-  return {active,profiles};
+  persistDraft();
+  return {active:state.active,profiles:state.document?.profiles||{}};
 }
 
 function applyDocument(doc){
-  state.document=doc||{active:"ccswitch",profiles:{}};
-  const names=profileNames(state.document);
-  const active=state.document.active||names[0]||"ccswitch";
-  $("#active").innerHTML=names.map(name=>`<option value="${esc(name)}"${name===active?" selected":""}>${esc(name)}</option>`).join("");
-  $("#active").value=active;
-  const profile=(state.document.profiles||{})[active]||{};
-  $("#api_type").value=profile.api_type||"anthropic";
-  $("#api_url").value=profile.api_url||profile.request_url||"";
-  $("#base_url").value=profile.base_url||"";
-  $("#api_key").value=profile.api_key||"";
-  $("#auth_token").value=profile.auth_token||"";
-  $("#model").value=profile.model||"";
-  $("#timeout_seconds").value=profile.timeout_seconds??60;
-  $("#temperature").value=profile.temperature??0.2;
-  $("#max_tokens").value=profile.max_tokens??4096;
-  $("#ccswitch_path").value=profile.ccswitch?.config_path||"";
-  $("#ccswitch_profile").value=profile.ccswitch?.profile||"";
-  $("#result").textContent="暂无结果";
-  $("#result").classList.add("muted");
-  showError("");
-  $("#status").textContent=`${active} · ${$("#api_type").value}`;
+  state.document=doc||{active:"zhipu",profiles:{}};
+  const names=profileNames();
+  let active=state.document.active;
+  if(!names.includes(active)) active=names[0]||"zhipu";
+  state.active=active;
+  state.editing=active;
+  state.dirty=false;
+  loadProfileToForm(active);
+  render();
 }
 
 async function loadConfig(){
-  state.loading=true;
   setBusy(true);
   try{
     const data=await api("/api/config");
     applyDocument(data.document);
-    $("#status").textContent=`${currentActive()} · ${data.config?.api_type||$("#api_type").value}`;
   }catch(err){
-    showError(`读取配置失败：${err.message}`);
+    showError(`读取配置失败:${err.message}`);
     $("#status").textContent="读取失败";
   }finally{
-    state.loading=false;
     setBusy(false);
   }
 }
@@ -251,54 +427,83 @@ async function saveConfig(){
     const document=collectDocument();
     const data=await api("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({document})});
     applyDocument(data.document||document);
-    $("#status").textContent=`已保存 · ${currentActive()}`;
   }catch(err){
-    showError(`保存失败：${err.message}`);
+    showError(`保存失败:${err.message}`);
   }finally{
     setBusy(false,"save");
   }
 }
 
-async function testConfig(){
-  showError("");
-  setBusy(true,"test");
+async function sendChat(presetText){
+  if(state.chatSending) return;
+  const text=(presetText!==undefined?String(presetText):$("#chat_input").value).trim();
+  if(!text) return;
+  $("#chat_input").value="";
+  state.chat=state.chat.concat([{role:"user",content:text}]);
+  state.chatSending=true;
+  refreshButtons();renderStatus();renderChat();
   try{
     const document=collectDocument();
-    const question=$("#question").value.trim()||"接口是否可用？";
-    const data=await api("/api/config/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({document,question})});
-    $("#result").classList.remove("muted");
-    $("#result").textContent=`${data.config.api_type} · ${data.config.model}\n${data.reply}`;
+    const messages=state.chat.map(m=>({role:m.role,content:m.content}));
+    const system=$("#system_prompt").value.trim()||undefined;
+    const data=await api("/api/config/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({document,messages,system})});
+    state.chat=state.chat.concat([{role:"assistant",content:data.reply||"(空回复)"}]);
   }catch(err){
-    $("#result").classList.remove("muted");
-    $("#result").textContent="";
-    showError(`连通性测试失败：${err.message}`);
+    state.chat=state.chat.concat([{role:"assistant",content:`[请求失败] ${err.message}`,error:true}]);
   }finally{
-    setBusy(false,"test");
+    state.chatSending=false;
+    refreshButtons();renderStatus();renderChat();
   }
 }
 
-function persistActiveDraft(){
-  if(!state.document) return;
-  const doc=collectDocument();
-  state.document.active=doc.active;
-  state.document.profiles=doc.profiles;
+function clearChat(){
+  if(state.chatSending) return;
+  state.chat=[];
+  renderChat();
+}
+
+function toggleKey(){
+  state.showKey=!state.showKey;
+  $("#api_key").type=state.showKey?"text":"password";
+  $("#key_eye").textContent=state.showKey?"🙈":"👁";
 }
 
 function bindEvents(){
   $("#save_btn").addEventListener("click",saveConfig);
   $("#reload_btn").addEventListener("click",loadConfig);
-  $("#test_btn").addEventListener("click",testConfig);
-  $("#active").addEventListener("change",()=>{
-    persistActiveDraft();
-    state.document.active=$("#active").value;
-    applyDocument(state.document);
+  $("#add_btn").addEventListener("click",addProfile);
+  $("#activate_btn").addEventListener("click",()=>setActive(state.editing));
+  $("#key_eye").addEventListener("click",toggleKey);
+  $("#chat_send").addEventListener("click",()=>sendChat());
+  $("#chat_clear").addEventListener("click",clearChat);
+  $("#sys_toggle").addEventListener("click",()=>{
+    const box=$("#sys_box");
+    box.style.display=box.style.display==="none"?"":"none";
   });
-  ["api_type","api_url","base_url","api_key","auth_token","model","timeout_seconds","temperature","max_tokens","ccswitch_path","ccswitch_profile"].forEach(id=>{
-    $("#"+id).addEventListener("input",()=>$("#status").textContent=`${currentActive()} · ${$("#api_type").value}`);
+  $("#chat_input").addEventListener("keydown",(e)=>{
+    if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendChat();}
   });
+  $("#profile_list").addEventListener("click",(e)=>{
+    const actBtn=e.target.closest("[data-act]");
+    if(actBtn){
+      e.stopPropagation();
+      const act=actBtn.dataset.act,name=actBtn.dataset.name;
+      if(act==="rename") renameProfile(name);
+      if(act==="delete") deleteProfile(name);
+      return;
+    }
+    const card=e.target.closest(".profile-card");
+    if(card) selectProfile(card.dataset.name);
+  });
+  ["api_type","api_url","base_url","api_key","auth_token","model","timeout_seconds","temperature","max_tokens"].forEach(id=>{
+    $("#"+id).addEventListener("input",()=>{state.dirty=true;renderStatus();});
+  });
+  $("#api_type").addEventListener("change",()=>{state.dirty=true;renderStatus();renderRail();});
+  window.addEventListener("beforeunload",(e)=>{if(state.dirty){e.preventDefault();e.returnValue="";}});
 }
 
 bindEvents();
+renderChat();
 loadConfig();
 </script>
 </body>
